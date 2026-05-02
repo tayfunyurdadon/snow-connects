@@ -97,19 +97,97 @@ export default function InstructorSetup() {
         .filter(Boolean),
       resort_ids: selectedResorts,
     };
-    const { error } = await supabase
-      .from("instructor_profiles")
-      .upsert(payload, { onConflict: "user_id" });
-    setSaving(false);
-    if (error) {
-      Alert.alert("Kaydedilemedi", error.message);
-      return;
+
+    console.log("[instructor-setup] starting save", {
+      userId: user.id,
+      role: user.role,
+      payload,
+    });
+
+    try {
+      // Verify the session is still valid before writing — RLS upserts
+      // silently fail with cryptic messages when auth.uid() is null.
+      const sessionResp = await supabase.auth.getSession();
+      console.log("[instructor-setup] session check", {
+        hasSession: !!sessionResp.data.session,
+        sessionUserId: sessionResp.data.session?.user.id,
+        contextUserId: user.id,
+        match: sessionResp.data.session?.user.id === user.id,
+      });
+      if (!sessionResp.data.session) {
+        Alert.alert(
+          "Oturum yok",
+          "Lütfen tekrar giriş yapın. (no active session)",
+        );
+        return;
+      }
+
+      // Race the upsert against a 15s timeout so the spinner can't hang
+      // forever on a stuck network request.
+      const upsertPromise = supabase
+        .from("instructor_profiles")
+        .upsert(payload, { onConflict: "user_id" })
+        .select()
+        .single();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Supabase upsert timed out after 15s")),
+          15_000,
+        ),
+      );
+
+      const result = (await Promise.race([upsertPromise, timeoutPromise])) as
+        | Awaited<typeof upsertPromise>
+        | never;
+
+      console.log("[instructor-setup] upsert response", {
+        data: result.data,
+        error: result.error,
+      });
+
+      if (result.error) {
+        const e = result.error;
+        // PostgREST returns code/details/hint that explain RLS / schema
+        // / FK violations far better than the bare `message` alone.
+        console.warn("[instructor-setup] upsert failed", {
+          message: e.message,
+          code: e.code,
+          details: e.details,
+          hint: e.hint,
+        });
+        Alert.alert(
+          "Kaydedilemedi",
+          [
+            `message: ${e.message ?? "(none)"}`,
+            `code: ${e.code ?? "(none)"}`,
+            `details: ${e.details ?? "(none)"}`,
+            `hint: ${e.hint ?? "(none)"}`,
+          ].join("\n"),
+        );
+        return;
+      }
+
+      qc.invalidateQueries({ queryKey: ["my-profile", user.id] });
+      qc.invalidateQueries({ queryKey: ["instructors"] });
+      Alert.alert("Kaydedildi", "Profiliniz güncellendi.", [
+        { text: "Tamam", onPress: () => router.back() },
+      ]);
+    } catch (err) {
+      const e = err as Error;
+      console.warn("[instructor-setup] save threw", {
+        name: e.name,
+        message: e.message,
+        stack: e.stack,
+      });
+      Alert.alert(
+        "Beklenmeyen hata",
+        `${e.name ?? "Error"}: ${e.message ?? String(err)}`,
+      );
+    } finally {
+      // Always release the spinner so the button can never get stuck again.
+      setSaving(false);
     }
-    qc.invalidateQueries({ queryKey: ["my-profile", user.id] });
-    qc.invalidateQueries({ queryKey: ["instructors"] });
-    Alert.alert("Kaydedildi", "Profiliniz güncellendi.", [
-      { text: "Tamam", onPress: () => router.back() },
-    ]);
   }
 
   const previewPrice = toKurus(
