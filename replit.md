@@ -28,14 +28,32 @@ ski-lesson booking app (Expo + React Native) backed by Supabase.
 ### Roles & flows
 
 Three roles: `customer`, `instructor`, `admin`. Role is stored on `public.users.role`.
-The home tab (`(tabs)/index.tsx`) is role-aware:
 
-- **Customer**: resort grid → instructor list → instructor detail → booking wizard
-  (date → slots → students → summary) → payment → bookings tab + chat with instructor.
+**Guest browsing.** The app opens directly on the resort list — **no login is
+required to browse resorts, instructor lists, or instructor profiles**. Auth is
+prompted only when the visitor takes a member-only action (booking, payment,
+chat, the Rezervasyonlar/Mesajlar/Profil tabs). The auth screens accept a
+`?next=<path>` query param so the user returns to where they came from after
+signing in. See `components/ui/SignInGate.tsx` for the in-place tab CTA.
+
+The home tab (`(tabs)/index.tsx`) is role-aware once a user is signed in:
+
+- **Customer / guest**: resort grid → instructor list → instructor detail →
+  booking wizard (date → slots → students → summary) → payment → bookings
+  tab + chat with instructor. The booking screen is the first auth-gated step.
 - **Instructor**: today's overview, calendar (block/unblock 8 daily 50-min slots),
-  upcoming bookings, payouts list, profile setup.
+  upcoming bookings, payouts list, profile setup. After registering as
+  "Eğitmen" the user is routed straight to `instructor-panel/setup`.
 - **Admin**: stats tiles, instructor management (block/unblock, reset strikes),
   flagged messages list, all bookings overview.
+
+**Role on signup.** The `Hesap türü` choice (Öğrenci / Eğitmen) on the register
+screen is sent through `supabase.auth.signUp` as `options.data.role`. The
+`handle_new_user()` trigger reads it from `raw_user_meta_data` and writes it
+onto `public.users.role` at row creation time, so the role is correct
+regardless of session/email-confirmation timing. A belt-and-suspenders client
+update via the `users_self_update` RLS policy keeps things consistent if an
+older trigger version is still installed.
 
 ### Domain rules
 

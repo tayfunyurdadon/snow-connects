@@ -1,17 +1,20 @@
 import { Feather } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginScreen() {
   const c = useColors();
   const router = useRouter();
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,16 +29,29 @@ export default function LoginScreen() {
       email: email.trim(),
       password,
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       Alert.alert("Giriş başarısız", error.message);
       return;
     }
-    router.replace("/(app)/(tabs)");
+    const profile = await refreshUser();
+    setLoading(false);
+    const target = resolveTarget(next, profile?.role);
+    router.replace(target as never);
   }
 
   return (
     <Screen hasHeader={false} contentStyle={{ gap: 18, paddingTop: 64 }}>
+      <Pressable
+        onPress={() => router.replace("/(app)/(tabs)")}
+        style={styles.cancel}
+      >
+        <Feather name="x" size={20} color={c.mutedForeground} />
+        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_500Medium" }}>
+          Misafir olarak gez
+        </Text>
+      </Pressable>
+
       <View style={styles.brand}>
         <View
           style={[
@@ -77,7 +93,14 @@ export default function LoginScreen() {
         <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>
           Hesabın yok mu?{" "}
         </Text>
-        <Link href="/(auth)/register" replace>
+        <Link
+          href={
+            next
+              ? { pathname: "/(auth)/register", params: { next } }
+              : "/(auth)/register"
+          }
+          replace
+        >
           <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>
             Kayıt ol
           </Text>
@@ -87,7 +110,23 @@ export default function LoginScreen() {
   );
 }
 
+function resolveTarget(next: string | undefined, role: string | undefined): string {
+  if (next) return next;
+  // Role-aware landing handled inside the home tab itself.
+  return "/(app)/(tabs)";
+}
+
 const styles = StyleSheet.create({
+  cancel: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    padding: 6,
+    zIndex: 10,
+  },
   brand: { alignItems: "center", gap: 12 },
   logoCircle: {
     width: 80,

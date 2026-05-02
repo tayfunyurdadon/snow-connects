@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading } from "@/components/ui/Loading";
 import { Screen } from "@/components/ui/Screen";
+import { SignInGate } from "@/components/ui/SignInGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { supabase } from "@/lib/supabase";
@@ -74,7 +75,14 @@ export default function MessagesTab() {
     enabled: !!user,
   });
 
-  if (!user) return <Loading />;
+  if (!user) {
+    return (
+      <SignInGate
+        title="Mesajlarını gör"
+        description="Eğitmeninle yazışabilmek için bir hesabın olmalı."
+      />
+    );
+  }
 
   return (
     <Screen

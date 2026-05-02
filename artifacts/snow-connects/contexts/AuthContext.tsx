@@ -14,7 +14,7 @@ interface AuthState {
   loading: boolean;
   session: Session | null;
   user: AppUser | null;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<AppUser | null>;
   signOut: () => Promise<void>;
 }
 
@@ -25,23 +25,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
 
-  const fetchProfile = useCallback(async (uid: string | undefined) => {
-    if (!uid) {
-      setUser(null);
-      return;
-    }
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", uid)
-      .maybeSingle();
-    if (error) {
-      console.warn("[auth] profile fetch", error.message);
-      setUser(null);
-      return;
-    }
-    setUser(data as AppUser | null);
-  }, []);
+  const fetchProfile = useCallback(
+    async (uid: string | undefined): Promise<AppUser | null> => {
+      if (!uid) {
+        setUser(null);
+        return null;
+      }
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", uid)
+        .maybeSingle();
+      if (error) {
+        console.warn("[auth] profile fetch", error.message);
+        setUser(null);
+        return null;
+      }
+      const profile = (data ?? null) as AppUser | null;
+      setUser(profile);
+      return profile;
+    },
+    [],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -61,9 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchProfile]);
 
-  const refreshUser = useCallback(async () => {
-    await fetchProfile(session?.user.id);
-  }, [fetchProfile, session]);
+  const refreshUser = useCallback(async (): Promise<AppUser | null> => {
+    const { data } = await supabase.auth.getSession();
+    return fetchProfile(data.session?.user.id);
+  }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

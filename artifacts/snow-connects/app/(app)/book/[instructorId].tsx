@@ -17,6 +17,7 @@ import { Loading } from "@/components/ui/Loading";
 import { MonthCalendar } from "@/components/ui/MonthCalendar";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { isInSeason, nextSeasonStart } from "@/lib/season";
@@ -37,8 +38,17 @@ export default function BookScreen() {
   const c = useColors();
   const router = useRouter();
   const { instructorId } = useLocalSearchParams<{ instructorId: string }>();
+  const { session, loading: authLoading } = useAuth();
   const today = new Date();
   const initial = isInSeason(today) ? today : nextSeasonStart(today);
+
+  // Auth gate — booking requires a signed-in customer. Bounce to login
+  // with a `next` param so we return here after auth.
+  React.useEffect(() => {
+    if (authLoading || session) return;
+    const next = encodeURIComponent(`/book/${instructorId}`);
+    router.replace(`/(auth)/login?next=${next}` as never);
+  }, [authLoading, session, instructorId, router]);
 
   const [step, setStep] = useState<Step>("date");
   const [date, setDate] = useState<string | null>(
@@ -120,6 +130,7 @@ export default function BookScreen() {
     });
   }, [studentCount]);
 
+  if (authLoading || !session) return <Loading />;
   if (isLoading || !instructor) return <Loading />;
 
   function toggleSlot(id: string) {

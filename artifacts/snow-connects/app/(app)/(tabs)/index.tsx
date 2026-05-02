@@ -18,11 +18,12 @@ import { supabase } from "@/lib/supabase";
 import type { Resort } from "@/lib/types";
 
 export default function HomeTab() {
-  const { user } = useAuth();
-  if (!user) return <Loading />;
+  const { user, loading } = useAuth();
+  if (loading) return <Loading />;
 
-  if (user.role === "instructor") return <InstructorHome />;
-  if (user.role === "admin") return <AdminHome />;
+  if (user?.role === "instructor") return <InstructorHome />;
+  if (user?.role === "admin") return <AdminHome />;
+  // Customers AND guests both see the resort browser.
   return <CustomerHome />;
 }
 
@@ -60,6 +61,45 @@ function CustomerHome() {
           {user?.name?.split(" ")[0] || "Kayakçı"}
         </Text>
       </View>
+
+      {!user && (
+        <Card
+          onPress={() => router.push("/(auth)/login")}
+          style={{ backgroundColor: c.primary }}
+        >
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+          >
+            <Feather name="user-plus" size={20} color={c.primaryForeground} />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: c.primaryForeground,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 14,
+                }}
+              >
+                Hesabınla daha fazlasını yap
+              </Text>
+              <Text
+                style={{
+                  color: c.primaryForeground,
+                  opacity: 0.85,
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                Rezervasyon, mesajlaşma ve ders takibi için giriş yap.
+              </Text>
+            </View>
+            <Feather
+              name="chevron-right"
+              size={20}
+              color={c.primaryForeground}
+            />
+          </View>
+        </Card>
+      )}
 
       {!seasonOpen && (
         <Card style={{ backgroundColor: c.secondary, borderColor: c.accent }}>

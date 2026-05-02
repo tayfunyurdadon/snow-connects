@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { SignInGate } from "@/components/ui/SignInGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -22,6 +23,15 @@ export default function ProfileTab() {
     instructor: "Eğitmen",
     admin: "Yönetici",
   };
+
+  if (!user) {
+    return (
+      <SignInGate
+        title="Profiline eriş"
+        description="Hesabını yönetmek ve bilgilerini güncellemek için giriş yap."
+      />
+    );
+  }
 
   return (
     <Screen contentStyle={{ paddingTop: insets.top + 12, gap: 14 }}>

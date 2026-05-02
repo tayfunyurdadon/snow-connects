@@ -31,9 +31,18 @@ create table if not exists users (
 
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_role text;
 begin
-  insert into public.users (id, email, name)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', ''))
+  v_role := coalesce(new.raw_user_meta_data->>'role', 'customer');
+  if v_role not in ('customer','instructor') then v_role := 'customer'; end if;
+  insert into public.users (id, email, name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'name', ''),
+    v_role
+  )
   on conflict (id) do nothing;
   return new;
 end;

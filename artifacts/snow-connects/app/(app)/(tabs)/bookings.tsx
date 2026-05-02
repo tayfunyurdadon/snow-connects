@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { SignInGate } from "@/components/ui/SignInGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
@@ -53,7 +54,14 @@ export default function BookingsTab() {
     );
   }, [data, tab, todayIso]);
 
-  if (!user) return <Loading />;
+  if (!user) {
+    return (
+      <SignInGate
+        title="Rezervasyonlarını görüntüle"
+        description="Geçmiş ve yaklaşan derslerini görmek için giriş yapmalısın."
+      />
+    );
+  }
 
   return (
     <Screen

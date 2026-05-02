@@ -1,4 +1,4 @@
-import { Redirect, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import React from "react";
 
 import { Loading } from "@/components/ui/Loading";
@@ -6,11 +6,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function AppLayout() {
-  const { loading, session } = useAuth();
+  const { loading } = useAuth();
   const c = useColors();
 
+  // Guest browsing is allowed. Individual screens (booking, payment, chat,
+  // panels) gate on session themselves.
   if (loading) return <Loading />;
-  if (!session) return <Redirect href="/(auth)/login" />;
 
   return (
     <Stack
