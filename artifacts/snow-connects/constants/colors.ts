@@ -1,19 +1,28 @@
 const palette = {
   white: "#ffffff",
-  ice50: "#f4f9ff",
-  ice100: "#e6f0fa",
-  ice200: "#cfe2f3",
-  ice300: "#a8c8e0",
-  iceBlue: "#7fb3d5",
-  navy: "#0e2a47",
-  navyDeep: "#081a2e",
-  navySoft: "#1d4673",
+  paper: "#fafafa",
+  bone: "#f4f4f0",
+  ice50: "#f6f8fb",
+  ice100: "#eaf0f6",
+  ice200: "#cfdbe6",
+  // Deep editorial navy — base brand color.
+  navy: "#0A1628",
+  navyDeep: "#050d1a",
+  navySoft: "#1a2a44",
+  navyMuted: "#2c3e5b",
+  // Bold premium red — used for active states and accent flags.
+  red: "#E11D2E",
+  redDark: "#b81522",
   slate: "#475569",
-  slateMuted: "#94a3b8",
-  border: "#dbe6f0",
+  slateMuted: "#8a96a7",
+  border: "#e3e7ec",
+  borderStrong: "#cdd5df",
   danger: "#dc2626",
   warning: "#d97706",
   success: "#059669",
+  // Translucent overlays for hero imagery.
+  overlay: "rgba(10, 22, 40, 0.55)",
+  overlayDark: "rgba(5, 13, 26, 0.78)",
 };
 
 const colors = {
@@ -21,7 +30,7 @@ const colors = {
     text: palette.navy,
     tint: palette.navy,
 
-    background: palette.ice50,
+    background: palette.white,
     foreground: palette.navy,
 
     card: palette.white,
@@ -33,25 +42,33 @@ const colors = {
     secondary: palette.ice100,
     secondaryForeground: palette.navy,
 
-    muted: palette.ice100,
+    muted: palette.ice50,
     mutedForeground: palette.slate,
 
-    accent: palette.iceBlue,
+    // Accent is the editorial red — chevrons, active tabs, key callouts.
+    accent: palette.red,
     accentForeground: palette.white,
+    accentDark: palette.redDark,
 
     destructive: palette.danger,
     destructiveForeground: palette.white,
 
     border: palette.border,
+    borderStrong: palette.borderStrong,
     input: palette.border,
 
-    iceBlue: palette.iceBlue,
     navySoft: palette.navySoft,
+    navyDeep: palette.navyDeep,
+    navyMuted: palette.navyMuted,
     slateMuted: palette.slateMuted,
     success: palette.success,
     warning: palette.warning,
+    overlay: palette.overlay,
+    overlayDark: palette.overlayDark,
+    paper: palette.paper,
+    bone: palette.bone,
   },
-  radius: 14,
+  radius: 18,
 };
 
 export default colors;

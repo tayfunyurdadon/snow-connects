@@ -16,13 +16,15 @@ export default function AppLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: c.background },
+        headerStyle: { backgroundColor: c.primary },
         headerTitleStyle: {
-          color: c.foreground,
-          fontFamily: "Inter_600SemiBold",
+          color: c.primaryForeground,
+          fontFamily: "PlayfairDisplay_700Bold",
+          fontSize: 18,
         },
-        headerTintColor: c.primary,
+        headerTintColor: c.primaryForeground,
         headerBackTitle: "Geri",
+        headerShadowVisible: false,
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

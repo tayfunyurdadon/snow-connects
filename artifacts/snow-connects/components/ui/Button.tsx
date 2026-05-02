@@ -10,7 +10,7 @@ import {
 
 import { useColors } from "@/hooks/useColors";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 
 interface Props {
   label: string;
@@ -77,7 +77,9 @@ function makeStyles(c: ReturnType<typeof useColors>, variant: Variant) {
         ? c.secondary
         : variant === "danger"
           ? c.destructive
-          : "transparent";
+          : variant === "accent"
+            ? c.accent
+            : "transparent";
   const fg =
     variant === "primary"
       ? c.primaryForeground
@@ -85,26 +87,30 @@ function makeStyles(c: ReturnType<typeof useColors>, variant: Variant) {
         ? c.secondaryForeground
         : variant === "danger"
           ? c.destructiveForeground
-          : c.primary;
+          : variant === "accent"
+            ? c.accentForeground
+            : c.primary;
   return StyleSheet.create({
     base: {
       backgroundColor: bg,
-      borderRadius: c.radius,
-      paddingVertical: 14,
-      paddingHorizontal: 18,
+      borderRadius: 999,
+      paddingVertical: 16,
+      paddingHorizontal: 22,
       borderWidth: variant === "ghost" ? 1 : 0,
-      borderColor: c.border,
+      borderColor: c.borderStrong ?? c.border,
     },
     inner: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 8,
+      gap: 10,
     },
     label: {
       color: fg,
       fontFamily: "Inter_600SemiBold",
-      fontSize: 16,
+      fontSize: 15,
+      letterSpacing: 0.3,
+      textTransform: "uppercase",
     },
   });
 }
