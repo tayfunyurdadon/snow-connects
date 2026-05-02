@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,19 +16,10 @@ import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
 type Row = InstructorProfile & { user: Pick<AppUser, "id" | "name"> };
 
-type SlotFilter = "morning" | "afternoon" | "all";
-
-const FILTERS: { id: SlotFilter; label: string }[] = [
-  { id: "morning", label: "Sabah" },
-  { id: "afternoon", label: "Öğleden sonra" },
-  { id: "all", label: "Tam gün" },
-];
-
 export default function ResortInstructors() {
   const c = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [filter, setFilter] = useState<SlotFilter>("all");
 
   const { data: resort } = useQuery({
     queryKey: ["resort", id],
@@ -79,41 +70,6 @@ export default function ResortInstructors() {
             </Text>
           </View>
         ) : null}
-
-        <View style={{ gap: 6 }}>
-          <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-            Ders saati
-          </Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {FILTERS.map((f) => {
-              const active = filter === f.id;
-              return (
-                <Pressable
-                  key={f.id}
-                  onPress={() => setFilter(f.id)}
-                  style={[
-                    styles.chip,
-                    {
-                      borderRadius: c.radius,
-                      borderColor: active ? c.primary : c.border,
-                      backgroundColor: active ? c.primary : c.card,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: active ? c.primaryForeground : c.foreground,
-                      fontFamily: "Inter_500Medium",
-                      fontSize: 12,
-                    }}
-                  >
-                    {f.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
 
         {isLoading ? (
           <Loading inline />
@@ -273,10 +229,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
   },
 });
