@@ -214,7 +214,143 @@ function CustomerHome() {
           ))}
         </View>
       )}
+
+      <WhyChooseSection />
     </Screen>
+  );
+}
+
+function WhyChooseSection() {
+  const c = useColors();
+  return (
+    <View style={{ gap: 16, marginTop: 12 }}>
+      <View style={{ gap: 10 }}>
+        <Text
+          style={{
+            color: c.accentDeep,
+            fontFamily: "Inter_700Bold",
+            fontSize: 11,
+            letterSpacing: 1.4,
+          }}
+        >
+          NEDEN SNOW CONNECTS
+        </Text>
+        <Text
+          style={{
+            color: c.foreground,
+            fontFamily: "Fraunces_600SemiBold",
+            fontSize: 26,
+            letterSpacing: -0.6,
+            lineHeight: 32,
+          }}
+        >
+          Snow Connects ile neden{"\n"}kayak dersi alınır?
+        </Text>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 14,
+            lineHeight: 21,
+          }}
+        >
+          Snow Connects, Türkiye'nin en iyi kayak ve snowboard eğitmenlerini
+          bulmanı ve dakikalar içinde rezervasyon yapmanı sağlar. Yeni
+          başlayanlar, ileri seviye kayakçılar ve her yaştan çocuklar için özel
+          ve grup dersleri.
+        </Text>
+      </View>
+
+      <View style={{ gap: 12 }}>
+        <BenefitCard
+          icon="award"
+          title="Güvenilir, Sertifikalı Eğitmenler"
+          body="ISIA, TKF ve uluslararası sertifikalı eğitmenlerle pistleri en iyi tanıyan profesyonellerden ders al. Her eğitmenimiz titizlikle seçilir; deneyim ve güvenlik ön planda."
+          bg="#E4EEF6"
+          iconBg="#FFFFFF"
+          iconColor="#2F5C7A"
+        />
+        <BenefitCard
+          icon="target"
+          title="Sana Özel Ders Deneyimi"
+          body="Sıfırdan başlayan biri, tekniğini geliştirmek isteyen orta seviye bir kayakçı ya da off-piste deneyimi arayan ileri seviye biri olabilirsin. Eğitmenin dersi tamamen senin hedeflerine ve seviyene göre planlar."
+          bg="#E2EEDF"
+          iconBg="#FFFFFF"
+          iconColor="#3D7A40"
+        />
+        <BenefitCard
+          icon="message-square"
+          title="Doğrulanmış Yorumlar"
+          body="Snow Connects'teki tüm yorumlar gerçek dersleri tamamlamış müşterilerden gelir. Eğitmenini seçmeden önce şeffaf değerlendirmeleri okuyabilir, gönül rahatlığıyla rezervasyon yapabilirsin."
+          bg="#FBF3E2"
+          iconBg="#FFFFFF"
+          iconColor="#A66A1A"
+        />
+      </View>
+    </View>
+  );
+}
+
+function BenefitCard({
+  icon,
+  title,
+  body,
+  bg,
+  iconBg,
+  iconColor,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  title: string;
+  body: string;
+  bg: string;
+  iconBg: string;
+  iconColor: string;
+}) {
+  const c = useColors();
+  return (
+    <View
+      style={{
+        backgroundColor: bg,
+        borderRadius: c.radiusLg,
+        padding: 22,
+        gap: 12,
+      }}
+    >
+      <View
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: 14,
+          backgroundColor: iconBg,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Feather name={icon} size={20} color={iconColor} />
+      </View>
+      <Text
+        style={{
+          color: c.foreground,
+          fontFamily: "Fraunces_600SemiBold",
+          fontSize: 19,
+          letterSpacing: -0.3,
+          lineHeight: 25,
+        }}
+      >
+        {title}
+      </Text>
+      <Text
+        style={{
+          color: c.foreground,
+          opacity: 0.78,
+          fontFamily: "Inter_400Regular",
+          fontSize: 13.5,
+          lineHeight: 21,
+        }}
+      >
+        {body}
+      </Text>
+    </View>
   );
 }
 
