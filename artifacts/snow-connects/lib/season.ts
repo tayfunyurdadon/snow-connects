@@ -1,8 +1,8 @@
-// Ski season runs December 15 → April 15.
+// Ski season runs December 1 → April 15.
 // Booking is only allowed inside the season window.
 
 export const SEASON_START_MONTH = 12;
-export const SEASON_START_DAY = 15;
+export const SEASON_START_DAY = 1;
 export const SEASON_END_MONTH = 4;
 export const SEASON_END_DAY = 15;
 

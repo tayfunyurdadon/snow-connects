@@ -17,7 +17,11 @@ import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 export default function InstructorDetail() {
   const c = useColors();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from, to } = useLocalSearchParams<{
+    id: string;
+    from?: string;
+    to?: string;
+  }>();
 
   const { data, isLoading } = useQuery({
     queryKey: ["instructor", id],
@@ -164,7 +168,13 @@ export default function InstructorDetail() {
 
       <Button
         label="Rezervasyon Yap"
-        onPress={() => router.push(`/(app)/book/${data.user_id}`)}
+        onPress={() =>
+          router.push(
+            from && to
+              ? (`/(app)/book/${data.user_id}?from=${from}&to=${to}` as never)
+              : (`/(app)/book/${data.user_id}` as never),
+          )
+        }
       />
     </Screen>
   );

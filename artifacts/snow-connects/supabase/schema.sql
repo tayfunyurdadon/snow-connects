@@ -314,7 +314,8 @@ begin
   if v_student_count is null or v_student_count < 1 then raise exception 'no students'; end if;
 
   v_year := extract(year from p_date)::int;
-  v_season_start := make_date(case when extract(month from p_date)::int >= 12 then v_year else v_year - 1 end, 12, 15);
+  -- Season window: Dec 1 – Apr 15 (must stay in sync with lib/season.ts).
+  v_season_start := make_date(case when extract(month from p_date)::int >= 12 then v_year else v_year - 1 end, 12, 1);
   v_season_end   := make_date(extract(year from v_season_start)::int + 1, 4, 15);
   if p_date < v_season_start or p_date > v_season_end then
     raise exception 'season closed';

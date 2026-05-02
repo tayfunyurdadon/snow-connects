@@ -67,11 +67,21 @@ interface Draft {
 export default function BookScreen() {
   const c = useColors();
   const router = useRouter();
-  const { instructorId } = useLocalSearchParams<{ instructorId: string }>();
+  const { instructorId, from: rangeFrom, to: rangeTo } = useLocalSearchParams<{
+    instructorId: string;
+    from?: string;
+    to?: string;
+  }>();
   const { session, loading: authLoading } = useAuth();
 
   const today = stripTime(new Date());
-  const initialDate = isInSeason(today) ? today : nextSeasonStart(today);
+  // Anchor the visible week on the date range the user picked on the
+  // resort screen (if any). Otherwise default to today / next season open.
+  const initialDate = rangeFrom
+    ? stripTime(new Date(rangeFrom))
+    : isInSeason(today)
+      ? today
+      : nextSeasonStart(today);
 
   const [weekStart, setWeekStart] = useState<Date>(stripTime(initialDate));
   const [resortId, setResortId] = useState<string | null>(null);
@@ -284,6 +294,12 @@ export default function BookScreen() {
     // it before deciding whether to bounce — otherwise a slow auth resolve
     // could let a guest tap through to the create_booking RPC, which then
     // 401s and loses the in-memory state.
+    // Preserve the date-range query params across the auth bounce so the
+    // booking grid re-anchors on the same week when the user comes back.
+    const rangeQs =
+      rangeFrom && rangeTo ? `?from=${rangeFrom}&to=${rangeTo}` : "";
+    const nextPath = `/(app)/book/${instructorId}${rangeQs}`;
+
     if (authLoading) {
       let resolved = session;
       const start = Date.now();
@@ -295,13 +311,13 @@ export default function BookScreen() {
       }
       if (!resolved) {
         await persistDraft();
-        const next = encodeURIComponent(`/(app)/book/${instructorId}`);
+        const next = encodeURIComponent(nextPath);
         router.push(`/(auth)/login?next=${next}` as never);
         return;
       }
     } else if (!session) {
       await persistDraft();
-      const next = encodeURIComponent(`/(app)/book/${instructorId}`);
+      const next = encodeURIComponent(nextPath);
       router.push(`/(auth)/login?next=${next}` as never);
       return;
     }

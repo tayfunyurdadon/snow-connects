@@ -143,7 +143,7 @@ function CustomerHome() {
           {data.map((r) => (
             <Card
               key={r.id}
-              onPress={() => router.push(`/(app)/resort/${r.id}`)}
+              onPress={() => router.push(`/(app)/dates/${r.id}`)}
             >
               <View style={styles.row}>
                 <View
