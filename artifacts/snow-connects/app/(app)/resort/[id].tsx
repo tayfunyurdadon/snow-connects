@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
@@ -10,16 +10,9 @@ import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
-import { formatDateShortTR, formatTRY } from "@/lib/format";
-import { stripTime } from "@/lib/season";
+import { formatTRY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import { TIME_SLOTS } from "@/lib/timeSlots";
-import type {
-  AppUser,
-  InstructorProfile,
-  Resort,
-  TimeSlot,
-} from "@/lib/types";
+import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
 type Row = InstructorProfile & { user: Pick<AppUser, "id" | "name"> };
 
@@ -31,18 +24,10 @@ const FILTERS: { id: SlotFilter; label: string }[] = [
   { id: "all", label: "Tam gün" },
 ];
 
-// 09:00 – 11:50 is "morning", 12:00+ is "afternoon" — matches the chip copy.
-const MORNING_SLOT_IDS = TIME_SLOTS.filter((s) => s.id < "12:00").map((s) => s.id);
-const AFTERNOON_SLOT_IDS = TIME_SLOTS.filter((s) => s.id >= "12:00").map((s) => s.id);
-
 export default function ResortInstructors() {
   const c = useColors();
   const router = useRouter();
-  const { id, from, to } = useLocalSearchParams<{
-    id: string;
-    from?: string;
-    to?: string;
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [filter, setFilter] = useState<SlotFilter>("all");
 
   const { data: resort } = useQuery({
@@ -58,7 +43,7 @@ export default function ResortInstructors() {
     },
   });
 
-  const { data: instructors, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["instructors", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -75,74 +60,10 @@ export default function ResortInstructors() {
     enabled: !!id,
   });
 
-  // Pull every booked/manual slot for any of these instructors inside the
-  // selected window, in one round-trip. Cells default to "available" when
-  // no row exists, so we only need to know what is NOT available.
-  const instructorIds = useMemo(
-    () => (instructors ?? []).map((p) => p.user_id),
-    [instructors],
-  );
-
-  const { data: takenSlots } = useQuery({
-    queryKey: ["range-slots", id, from, to, instructorIds.join(",")],
-    enabled: !!from && !!to && instructorIds.length > 0,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("time_slots")
-        .select("instructor_id, date, slot_time, status")
-        .in("instructor_id", instructorIds)
-        .gte("date", from!)
-        .lte("date", to!);
-      if (error) throw error;
-      return (data ?? []) as Pick<
-        TimeSlot,
-        "instructor_id" | "date" | "slot_time" | "status"
-      >[];
-    },
-  });
-
-  const dayCount = useMemo(() => {
-    if (!from || !to) return 0;
-    const a = stripTime(new Date(from)).getTime();
-    const b = stripTime(new Date(to)).getTime();
-    return Math.round((b - a) / 86400000) + 1;
-  }, [from, to]);
-
-  // Filter instructors to those with at least ONE available slot in the
-  // window (respecting the morning/afternoon/all chip).
-  const visible = useMemo(() => {
-    const list = instructors ?? [];
-    if (!from || !to) return list;
-
-    const slotPool =
-      filter === "morning"
-        ? MORNING_SLOT_IDS
-        : filter === "afternoon"
-          ? AFTERNOON_SLOT_IDS
-          : TIME_SLOTS.map((s) => s.id);
-    const totalSlotsPerInstructor = dayCount * slotPool.length;
-
-    // Tally taken slots per instructor that fall inside the chip's pool.
-    const takenByInstructor = new Map<string, number>();
-    (takenSlots ?? []).forEach((s) => {
-      if (s.status === "available") return;
-      if (!slotPool.includes(s.slot_time)) return;
-      takenByInstructor.set(
-        s.instructor_id,
-        (takenByInstructor.get(s.instructor_id) ?? 0) + 1,
-      );
-    });
-
-    return list.filter((p) => {
-      const taken = takenByInstructor.get(p.user_id) ?? 0;
-      return taken < totalSlotsPerInstructor;
-    });
-  }, [instructors, takenSlots, filter, dayCount, from, to]);
-
-  const rangeLabel =
-    from && to
-      ? `${formatDateShortTR(from)} → ${formatDateShortTR(to)}`
-      : null;
+  // Morning / Afternoon / Full day chips are an intent filter only at this
+  // step. Date-based availability filtering happens after the user picks
+  // an instructor (on the dates screen and the booking grid).
+  const visible = data ?? [];
 
   return (
     <>
@@ -157,62 +78,6 @@ export default function ResortInstructors() {
               {resort.region}
             </Text>
           </View>
-        ) : null}
-
-        {rangeLabel ? (
-          <Pressable
-            onPress={() =>
-              router.push(
-                `/(app)/dates/${id}?from=${from}&to=${to}` as never,
-              )
-            }
-          >
-            <Card
-              style={{ backgroundColor: c.secondary, borderColor: c.accent }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <Feather name="calendar" size={16} color={c.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      color: c.mutedForeground,
-                      fontSize: 11,
-                      fontFamily: "Inter_500Medium",
-                      textTransform: "uppercase",
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    Seçili tarih aralığı
-                  </Text>
-                  <Text
-                    style={{
-                      color: c.foreground,
-                      fontFamily: "Inter_700Bold",
-                      fontSize: 14,
-                      marginTop: 2,
-                    }}
-                  >
-                    {rangeLabel}
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    color: c.primary,
-                    fontSize: 12,
-                    fontFamily: "Inter_600SemiBold",
-                  }}
-                >
-                  Değiştir
-                </Text>
-              </View>
-            </Card>
-          </Pressable>
         ) : null}
 
         <View style={{ gap: 6 }}>
@@ -255,29 +120,15 @@ export default function ResortInstructors() {
         ) : visible.length === 0 ? (
           <EmptyState
             icon="user-x"
-            title={
-              from && to
-                ? "Bu tarihlerde uygun eğitmen yok"
-                : "Bu pistte eğitmen yok"
-            }
-            description={
-              from && to
-                ? "Tarih aralığını değiştirip tekrar deneyebilirsin."
-                : "Yakın zamanda eğitmenler eklendiğinde burada görünecek."
-            }
+            title="Bu pistte eğitmen yok"
+            description="Yakın zamanda eğitmenler eklendiğinde burada görünecek."
           />
         ) : (
           visible.map((p) => (
             <InstructorCard
               key={p.user_id}
               row={p}
-              onPress={() =>
-                router.push(
-                  from && to
-                    ? (`/(app)/instructor/${p.user_id}?from=${from}&to=${to}` as never)
-                    : (`/(app)/instructor/${p.user_id}` as never),
-                )
-              }
+              onPress={() => router.push(`/(app)/instructor/${p.user_id}`)}
             />
           ))
         )}
@@ -301,14 +152,12 @@ function InstructorCard({
     <Card onPress={onPress}>
       <View style={{ flexDirection: "row", gap: 12 }}>
         {row.photo ? (
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           <View
             style={[
               styles.photo,
               { backgroundColor: c.secondary, borderRadius: 12 },
             ]}
           >
-            {/* Photo URL renders only when set; otherwise we fall back below. */}
             <Text style={{ display: "none" }}>{row.photo}</Text>
             <Feather name="user" size={28} color={c.primary} />
           </View>

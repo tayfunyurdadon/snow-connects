@@ -20,14 +20,8 @@ import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { formatTRY } from "@/lib/format";
-import {
-  addDays,
-  isInSeason,
-  isoDate,
-  nextSeasonStart,
-  stripTime,
-} from "@/lib/season";
+import { formatDateShortTR, formatTRY } from "@/lib/format";
+import { isInSeason, isoDate, stripTime } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
 import {
@@ -39,7 +33,6 @@ import {
   type TimeSlot,
 } from "@/lib/types";
 
-const VISIBLE_DAYS = 7;
 const TR_DAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const TR_MONTHS_SHORT = [
   "Oca",
@@ -58,35 +51,53 @@ const TR_MONTHS_SHORT = [
 
 interface Draft {
   resortId: string | null;
-  date: string | null;
-  selectedSlots: string[];
+  from: string | null;
+  to: string | null;
+  // Composite "YYYY-MM-DD|HH:MM" keys; bookings can span multiple days.
+  selectedKeys: string[];
   studentCount: number;
   students: StudentInput[];
+}
+
+function buildDateRange(fromIso: string, toIso: string): Date[] {
+  const start = stripTime(new Date(fromIso));
+  const end = stripTime(new Date(toIso));
+  const out: Date[] = [];
+  for (
+    let t = start.getTime();
+    t <= end.getTime();
+    t += 86400000
+  ) {
+    out.push(new Date(t));
+  }
+  return out;
 }
 
 export default function BookScreen() {
   const c = useColors();
   const router = useRouter();
-  const { instructorId, from: rangeFrom, to: rangeTo } = useLocalSearchParams<{
+  const {
+    instructorId,
+    from: rangeFrom,
+    to: rangeTo,
+  } = useLocalSearchParams<{
     instructorId: string;
     from?: string;
     to?: string;
   }>();
   const { session, loading: authLoading } = useAuth();
 
-  const today = stripTime(new Date());
-  // Anchor the visible week on the date range the user picked on the
-  // resort screen (if any). Otherwise default to today / next season open.
-  const initialDate = rangeFrom
-    ? stripTime(new Date(rangeFrom))
-    : isInSeason(today)
-      ? today
-      : nextSeasonStart(today);
+  // Date range is required to enter this screen. If we landed here without
+  // it (deep link, stale draft), bounce back to the picker so the user
+  // selects their dates first.
+  useEffect(() => {
+    if (!rangeFrom || !rangeTo) {
+      router.replace(`/(app)/dates/${instructorId}` as never);
+    }
+  }, [rangeFrom, rangeTo, instructorId, router]);
 
-  const [weekStart, setWeekStart] = useState<Date>(stripTime(initialDate));
   const [resortId, setResortId] = useState<string | null>(null);
-  const [date, setDate] = useState<string | null>(null);
-  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [studentCount, setStudentCount] = useState<number>(1);
   const [students, setStudents] = useState<StudentInput[]>([blankStudent()]);
   const [submitting, setSubmitting] = useState(false);
@@ -95,6 +106,11 @@ export default function BookScreen() {
   const draftKey = `pending_booking_${instructorId}`;
 
   // Restore draft from a previous "Onayla" tap that bounced through login.
+  // IMPORTANT: only restore slot selections when the persisted draft's
+  // from/to exactly match the current query params. Otherwise the user
+  // came back with a different date range and stale slots from the old
+  // range would silently be totaled and submitted (the rows would not
+  // even be visible in the grid).
   useEffect(() => {
     let mounted = true;
     AsyncStorage.getItem(draftKey).then((str) => {
@@ -103,14 +119,14 @@ export default function BookScreen() {
         try {
           const d = JSON.parse(str) as Draft;
           if (d.resortId) setResortId(d.resortId);
-          if (d.date) {
-            setDate(d.date);
-            setWeekStart(stripTime(new Date(d.date)));
-          }
-          if (Array.isArray(d.selectedSlots)) setSelectedSlots(d.selectedSlots);
           if (d.studentCount) setStudentCount(d.studentCount);
           if (Array.isArray(d.students) && d.students.length > 0) {
             setStudents(d.students);
+          }
+          const sameRange =
+            d.from === (rangeFrom ?? null) && d.to === (rangeTo ?? null);
+          if (sameRange && Array.isArray(d.selectedKeys)) {
+            setSelectedKeys(d.selectedKeys);
           }
         } catch {
           /* ignore corrupt draft */
@@ -121,18 +137,12 @@ export default function BookScreen() {
     return () => {
       mounted = false;
     };
-  }, [draftKey]);
+  }, [draftKey, rangeFrom, rangeTo]);
 
   const visibleDates = useMemo(() => {
-    const out: Date[] = [];
-    for (let i = 0; i < VISIBLE_DAYS; i++) out.push(addDays(weekStart, i));
-    return out;
-  }, [weekStart]);
-  const rangeStart = useMemo(() => isoDate(visibleDates[0]), [visibleDates]);
-  const rangeEnd = useMemo(
-    () => isoDate(visibleDates[visibleDates.length - 1]),
-    [visibleDates],
-  );
+    if (!rangeFrom || !rangeTo) return [] as Date[];
+    return buildDateRange(rangeFrom, rangeTo);
+  }, [rangeFrom, rangeTo]);
 
   const { data: instructor, isLoading } = useQuery({
     queryKey: ["instructor-book", instructorId],
@@ -162,21 +172,21 @@ export default function BookScreen() {
     enabled: !!instructor,
   });
 
-  // Fetch every existing time_slot for this instructor across the visible
-  // 7-day window so the grid can show "Dolu" cells in one query.
+  // One query covering every existing time_slot for this instructor across
+  // the user's chosen date range.
   const { data: existingSlots } = useQuery({
-    queryKey: ["slots-range", instructorId, rangeStart, rangeEnd],
+    queryKey: ["slots-range", instructorId, rangeFrom, rangeTo],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("time_slots")
         .select("*")
         .eq("instructor_id", instructorId)
-        .gte("date", rangeStart)
-        .lte("date", rangeEnd);
+        .gte("date", rangeFrom!)
+        .lte("date", rangeTo!);
       if (error) throw error;
       return (data ?? []) as TimeSlot[];
     },
-    enabled: !!instructorId,
+    enabled: !!instructorId && !!rangeFrom && !!rangeTo,
   });
 
   const slotIndex = useMemo(() => {
@@ -185,21 +195,19 @@ export default function BookScreen() {
     return m;
   }, [existingSlots]);
 
-  // Prune stale selections after fresh slot data arrives (e.g. someone else
-  // booked one of the user's selected slots while they were filling in
+  // Prune stale selections after fresh slot data arrives (someone else may
+  // have booked one of the user's selected slots while they filled in
   // student info, or a hydrated draft references a now-unavailable slot).
-  // Without this, a "selected but disabled" cell would persist in state and
-  // submit() would 409 against the server's slot lock.
   useEffect(() => {
-    if (!date || selectedSlots.length === 0) return;
-    const stillValid = selectedSlots.filter((slotId) => {
-      const existing = slotIndex.get(`${date}|${slotId}`);
+    if (selectedKeys.length === 0) return;
+    const stillValid = selectedKeys.filter((key) => {
+      const existing = slotIndex.get(key);
       return !existing || existing.status === "available";
     });
-    if (stillValid.length !== selectedSlots.length) {
-      setSelectedSlots(stillValid);
+    if (stillValid.length !== selectedKeys.length) {
+      setSelectedKeys(stillValid);
     }
-  }, [slotIndex, date, selectedSlots]);
+  }, [slotIndex, selectedKeys]);
 
   useEffect(() => {
     if (resorts && resorts.length === 1 && !resortId) {
@@ -217,37 +225,27 @@ export default function BookScreen() {
   }, [studentCount]);
 
   const totals = useMemo(() => {
-    const base = (instructor?.base_price ?? 0) * selectedSlots.length;
+    const base = (instructor?.base_price ?? 0) * selectedKeys.length;
     const vat = Math.round(base * 0.2);
     return { base, vat, total: base + vat };
-  }, [instructor, selectedSlots.length]);
+  }, [instructor, selectedKeys.length]);
 
-  if (isLoading || !instructor || !draftHydrated) return <Loading />;
+  if (isLoading || !instructor || !draftHydrated || !rangeFrom || !rangeTo)
+    return <Loading />;
 
   function tapCell(cellDate: string, slotId: string) {
-    if (date !== cellDate) {
-      // Switching dates resets the slot selection — bookings are single-date.
-      setDate(cellDate);
-      setSelectedSlots([slotId]);
-      return;
-    }
-    setSelectedSlots((cur) =>
-      cur.includes(slotId) ? cur.filter((s) => s !== slotId) : [...cur, slotId],
+    const key = `${cellDate}|${slotId}`;
+    setSelectedKeys((cur) =>
+      cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key],
     );
-  }
-
-  function shiftWeek(delta: number) {
-    setWeekStart((cur) => {
-      const next = addDays(cur, delta * VISIBLE_DAYS);
-      return next.getTime() < today.getTime() ? today : next;
-    });
   }
 
   async function persistDraft(): Promise<Draft> {
     const draft: Draft = {
       resortId,
-      date,
-      selectedSlots,
+      from: rangeFrom ?? null,
+      to: rangeTo ?? null,
+      selectedKeys,
       studentCount,
       students,
     };
@@ -269,13 +267,25 @@ export default function BookScreen() {
 
   function validate(): string | null {
     if (!resortId) return "Lütfen bir pist seçin.";
-    if (!date) return "Lütfen tarih ve saat seçin.";
-    if (selectedSlots.length === 0) return "En az bir saat seçin.";
+    if (selectedKeys.length === 0) return "En az bir saat seçin.";
     const ok = students.every(
       (s) => s.firstName.trim() && s.lastName.trim() && s.age > 0,
     );
     if (!ok) return "Tüm öğrenciler için ad, soyad ve yaş girilmeli.";
     return null;
+  }
+
+  // Group selected slot keys by date so we can issue one create_booking
+  // RPC call per day. The server contract is single-day (p_date + slot
+  // times[]); spanning multiple days = multiple booking rows.
+  function groupByDate(keys: string[]): Map<string, string[]> {
+    const m = new Map<string, string[]>();
+    for (const k of keys) {
+      const [d, slot] = k.split("|");
+      if (!d || !slot) continue;
+      m.set(d, [...(m.get(d) ?? []), slot]);
+    }
+    return m;
   }
 
   async function submit() {
@@ -287,15 +297,8 @@ export default function BookScreen() {
 
     // AUTH GATE — only at the final confirmation step. If the user is
     // browsing as a guest, persist the draft and bounce to login. They
-    // come back to this screen with the draft re-hydrated.
-    //
-    // Note: we intentionally do NOT short-circuit on `authLoading`. If
-    // session is still resolving when the user taps "Onayla", we wait for
-    // it before deciding whether to bounce — otherwise a slow auth resolve
-    // could let a guest tap through to the create_booking RPC, which then
-    // 401s and loses the in-memory state.
-    // Preserve the date-range query params across the auth bounce so the
-    // booking grid re-anchors on the same week when the user comes back.
+    // come back to this screen with the draft re-hydrated and the same
+    // date range query params restored.
     const rangeQs =
       rangeFrom && rangeTo ? `?from=${rangeFrom}&to=${rangeTo}` : "";
     const nextPath = `/(app)/book/${instructorId}${rangeQs}`;
@@ -323,22 +326,65 @@ export default function BookScreen() {
     }
 
     setSubmitting(true);
-    const { data, error } = await supabase.rpc("create_booking", {
-      p_instructor: instructorId,
-      p_resort: resortId,
-      p_date: date,
-      p_slot_times: selectedSlots,
-      p_students: students,
-    });
-    setSubmitting(false);
-    if (error) {
-      Alert.alert("Rezervasyon başarısız", translateError(error.message));
-      return;
+    const grouped = [...groupByDate(selectedKeys).entries()].sort(
+      ([a], [b]) => a.localeCompare(b),
+    );
+    const createdIds: string[] = [];
+    for (const [d, slots] of grouped) {
+      const { data, error } = await supabase.rpc("create_booking", {
+        p_instructor: instructorId,
+        p_resort: resortId,
+        p_date: d,
+        p_slot_times: slots,
+        p_students: students,
+      });
+      if (error) {
+        setSubmitting(false);
+        const friendly = translateError(error.message);
+        if (createdIds.length === 0) {
+          Alert.alert("Rezervasyon başarısız", friendly);
+          return;
+        }
+        // Partial success — don't trap state; clear what was committed
+        // and route to the bookings list so the user can pay/manage.
+        await clearDraft();
+        Alert.alert(
+          "Kısmen oluşturuldu",
+          `${createdIds.length} gün rezerve edildi. Kalan günler için hata: ${friendly}`,
+          [
+            {
+              text: "Tamam",
+              onPress: () => router.replace("/(app)/(tabs)/bookings"),
+            },
+          ],
+        );
+        return;
+      }
+      createdIds.push((data as { booking_id: string }).booking_id);
     }
+    setSubmitting(false);
     await clearDraft();
-    const bookingId = (data as { booking_id: string }).booking_id;
-    router.replace(`/(app)/payment/${bookingId}`);
+
+    if (createdIds.length === 1) {
+      // Single-day booking → straight to its payment page (no extra tap).
+      router.replace(`/(app)/payment/${createdIds[0]}`);
+    } else {
+      Alert.alert(
+        "Rezervasyon onaylandı",
+        `${createdIds.length} ders oluşturuldu. Ödemeyi rezervasyonlarım sayfasından tamamlayabilirsin.`,
+        [
+          {
+            text: "Rezervasyonlarım",
+            onPress: () => router.replace("/(app)/(tabs)/bookings"),
+          },
+        ],
+      );
+    }
   }
+
+  const rangeLabel = `${formatDateShortTR(rangeFrom)} → ${formatDateShortTR(
+    rangeTo,
+  )}`;
 
   return (
     <Screen contentStyle={{ gap: 16 }}>
@@ -348,6 +394,58 @@ export default function BookScreen() {
           tone="accent"
         />
       ) : null}
+
+      <Card>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontSize: 11,
+                fontFamily: "Inter_500Medium",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              Seçili tarih aralığı
+            </Text>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_700Bold",
+                fontSize: 15,
+              }}
+            >
+              {rangeLabel}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() =>
+              router.replace(
+                `/(app)/dates/${instructorId}?from=${rangeFrom}&to=${rangeTo}` as never,
+              )
+            }
+            hitSlop={8}
+          >
+            <Text
+              style={{
+                color: c.primary,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+              }}
+            >
+              Değiştir
+            </Text>
+          </Pressable>
+        </View>
+      </Card>
 
       {(resorts ?? []).length > 1 ? (
         <View style={{ gap: 6 }}>
@@ -385,52 +483,20 @@ export default function BookScreen() {
       ) : null}
 
       <View style={{ gap: 8 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <Text style={[styles.h, { color: c.foreground }]}>
-            Tarih & saat seç
-          </Text>
-          <View style={{ flexDirection: "row", gap: 4 }}>
-            <Pressable
-              onPress={() => shiftWeek(-1)}
-              hitSlop={10}
-              disabled={weekStart.getTime() <= today.getTime()}
-              style={{
-                opacity: weekStart.getTime() <= today.getTime() ? 0.3 : 1,
-                padding: 4,
-              }}
-            >
-              <Feather name="chevron-left" size={22} color={c.foreground} />
-            </Pressable>
-            <Pressable
-              onPress={() => shiftWeek(1)}
-              hitSlop={10}
-              style={{ padding: 4 }}
-            >
-              <Feather name="chevron-right" size={22} color={c.foreground} />
-            </Pressable>
-          </View>
-        </View>
-
+        <Text style={[styles.h, { color: c.foreground }]}>Saatleri seç</Text>
         <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-          Boş bir saat seçin · her ders 50 dakika
+          Birden çok güne saat seçebilirsin · her ders 50 dakika
         </Text>
 
         <SlotGrid
           dates={visibleDates}
-          selectedDate={date}
-          selectedSlots={selectedSlots}
+          selectedKeys={selectedKeys}
           slotIndex={slotIndex}
           onTap={tapCell}
         />
       </View>
 
-      {selectedSlots.length > 0 ? (
+      {selectedKeys.length > 0 ? (
         <View style={{ gap: 10 }}>
           <Text style={[styles.h, { color: c.foreground }]}>
             Öğrenci sayısı
@@ -539,7 +605,8 @@ export default function BookScreen() {
                               j === i
                                 ? {
                                     ...x,
-                                    experienceLevel: lvl.value as ExperienceLevel,
+                                    experienceLevel:
+                                      lvl.value as ExperienceLevel,
                                   }
                                 : x,
                             ),
@@ -639,20 +706,19 @@ export default function BookScreen() {
 
 function SlotGrid({
   dates,
-  selectedDate,
-  selectedSlots,
+  selectedKeys,
   slotIndex,
   onTap,
 }: {
   dates: Date[];
-  selectedDate: string | null;
-  selectedSlots: string[];
+  selectedKeys: string[];
   slotIndex: Map<string, TimeSlot>;
   onTap: (date: string, slotId: string) => void;
 }) {
   const c = useColors();
   const dateColW = 72;
   const cellW = 58;
+  const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   return (
     <ScrollView
       horizontal
@@ -694,7 +760,7 @@ function SlotGrid({
           ))}
         </View>
 
-        {/* Body rows: one per date */}
+        {/* Body rows: one per date in the chosen range */}
         {dates.map((d) => {
           const iso = isoDate(d);
           const inSeason = isInSeason(d);
@@ -738,22 +804,16 @@ function SlotGrid({
                 </Text>
               </View>
               {TIME_SLOTS.map((s) => {
-                const existing = slotIndex.get(`${iso}|${s.id}`);
+                const key = `${iso}|${s.id}`;
+                const existing = slotIndex.get(key);
                 const taken =
                   !!existing && existing.status !== "available";
                 const disabled = !inSeason || taken;
                 // Disabled wins over selected — a slot that became taken
-                // after the user picked it (e.g. draft restored from
-                // AsyncStorage) should render gray, not navy.
-                const selected =
-                  !disabled &&
-                  selectedDate === iso &&
-                  selectedSlots.includes(s.id);
+                // after the user picked it (e.g. draft restored) renders
+                // gray, not navy.
+                const selected = !disabled && selectedSet.has(key);
 
-                // Visual hierarchy (disabled checked FIRST):
-                //  - taken/out → flat muted gray, no dot, low opacity
-                //  - selected  → solid dark navy fill, white text
-                //  - available → white card with subtle dot affordance
                 const bg = disabled
                   ? c.muted
                   : selected

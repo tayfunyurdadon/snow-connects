@@ -13,34 +13,37 @@ import { useColors } from "@/hooks/useColors";
 import { formatDateShortTR } from "@/lib/format";
 import { stripTime } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
-import type { Resort } from "@/lib/types";
+import type { AppUser, InstructorProfile } from "@/lib/types";
 
 export default function DateRangePicker() {
   const c = useColors();
   const router = useRouter();
-  const { resortId, from: initialFrom, to: initialTo } = useLocalSearchParams<{
-    resortId: string;
-    from?: string;
-    to?: string;
-  }>();
+  const { instructorId, from: initialFrom, to: initialTo } =
+    useLocalSearchParams<{
+      instructorId: string;
+      from?: string;
+      to?: string;
+    }>();
 
-  // Allow returning here with the previous range pre-filled (back button
-  // from the instructor list etc.)
+  // Allow arriving here with the previous range pre-filled (e.g. back
+  // button from the booking grid).
   const [from, setFrom] = useState<string | null>(initialFrom ?? null);
   const [to, setTo] = useState<string | null>(initialTo ?? null);
 
-  const { data: resort, isLoading } = useQuery({
-    queryKey: ["resort", resortId],
+  const { data: instructor, isLoading } = useQuery({
+    queryKey: ["instructor-dates", instructorId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("resorts")
-        .select("*")
-        .eq("id", resortId)
+        .from("instructor_profiles")
+        .select("*, user:users!inner(id, name)")
+        .eq("user_id", instructorId)
         .maybeSingle();
       if (error) throw error;
-      return data as Resort | null;
+      return data as
+        | (InstructorProfile & { user: Pick<AppUser, "id" | "name"> })
+        | null;
     },
-    enabled: !!resortId,
+    enabled: !!instructorId,
   });
 
   const dayCount = useMemo(() => {
@@ -55,7 +58,7 @@ export default function DateRangePicker() {
   function onConfirm() {
     if (!canContinue) return;
     router.push(
-      `/(app)/resort/${resortId}?from=${from}&to=${to}` as never,
+      `/(app)/book/${instructorId}?from=${from}&to=${to}` as never,
     );
   }
 
@@ -66,31 +69,31 @@ export default function DateRangePicker() {
 
   if (isLoading) return <Loading />;
 
+  const instructorName = instructor?.user?.name ?? "Eğitmen";
+
   return (
     <>
-      <Stack.Screen options={{ title: resort?.name ?? "Tarih seç" }} />
+      <Stack.Screen options={{ title: "Tarih seç" }} />
       <Screen contentStyle={{ gap: 16 }}>
         <View style={{ gap: 4 }}>
           <Text style={[styles.h1, { color: c.foreground }]}>
             Ne zaman kayacaksın?
           </Text>
           <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
-            {resort?.name
-              ? `${resort.name} · giriş ve çıkış tarihini seç`
-              : "Giriş ve çıkış tarihini seç"}
+            {instructorName} ile ders almak istediğin günleri seç.
           </Text>
         </View>
 
         <Card>
           <View style={styles.summaryRow}>
             <SummarySlot
-              label="Giriş"
+              label="Başlangıç"
               value={from ? formatDateShortTR(from) : "Tarih seç"}
               empty={!from}
             />
             <View style={[styles.divider, { backgroundColor: c.border }]} />
             <SummarySlot
-              label="Çıkış"
+              label="Bitiş"
               value={to ? formatDateShortTR(to) : "Tarih seç"}
               empty={!to}
             />
@@ -104,7 +107,7 @@ export default function DateRangePicker() {
                 textAlign: "center",
               }}
             >
-              {dayCount} gece · 1 Aralık – 15 Nisan arası seçilebilir
+              {dayCount} gün · 1 Aralık – 15 Nisan arası seçilebilir
             </Text>
           ) : (
             <Text
@@ -139,12 +142,16 @@ export default function DateRangePicker() {
           )}
           <View style={{ flex: 2 }}>
             <Button
-              label={canContinue ? "Eğitmenleri gör" : "Tarih seç"}
+              label={canContinue ? "Saatleri seç" : "Tarih seç"}
               onPress={onConfirm}
               disabled={!canContinue}
               icon={
                 canContinue ? (
-                  <Feather name="arrow-right" size={16} color={c.primaryForeground} />
+                  <Feather
+                    name="arrow-right"
+                    size={16}
+                    color={c.primaryForeground}
+                  />
                 ) : undefined
               }
             />
