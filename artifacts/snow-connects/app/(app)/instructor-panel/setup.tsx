@@ -122,6 +122,37 @@ export default function InstructorSetup() {
         return;
       }
 
+      // Self-heal a missing public.users row before the upsert. The most
+      // common cause of a stuck save is a FK violation against users.id
+      // because the handle_new_user trigger never ran (older accounts).
+      // ensure_my_user is a SECURITY DEFINER RPC that is idempotent.
+      // Role is derived server-side from auth.users.raw_user_meta_data — we
+      // do not pass it in (the RPC ignores client-supplied roles to prevent
+      // privilege escalation).
+      const ensureResp = await supabase.rpc("ensure_my_user", {
+        p_name: user.name ?? "",
+      });
+      console.log("[instructor-setup] ensure_my_user", {
+        error: ensureResp.error,
+      });
+      if (ensureResp.error) {
+        const e = ensureResp.error;
+        Alert.alert(
+          "Kullanıcı satırı oluşturulamadı",
+          [
+            "Önce kullanıcı kaydınız hazırlanırken hata oluştu.",
+            "",
+            `message: ${e.message ?? "(none)"}`,
+            `code: ${e.code ?? "(none)"}`,
+            `details: ${e.details ?? "(none)"}`,
+            `hint: ${e.hint ?? "(none)"}`,
+            "",
+            "Şemanın güncel olduğundan emin olun (supabase/schema.sql).",
+          ].join("\n"),
+        );
+        return;
+      }
+
       // Race the upsert against a 15s timeout so the spinner can't hang
       // forever on a stuck network request.
       const upsertPromise = supabase

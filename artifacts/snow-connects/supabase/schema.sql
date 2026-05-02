@@ -53,6 +53,41 @@ create trigger on_auth_user_created after insert on auth.users
   for each row execute function handle_new_user();
 
 ------------------------------------------------------------
+-- ensure_my_user RPC: self-heal a missing public.users row.
+-- Older accounts created before the trigger existed (or before
+-- the trigger fired correctly) can be missing their row in
+-- public.users, which causes FK violations on every downstream
+-- write (instructor_profiles, bookings, ...). Any authenticated
+-- client may call this to make sure their row exists.
+------------------------------------------------------------
+create or replace function ensure_my_user(
+  p_name text default null
+) returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_meta jsonb;
+  v_role text;
+  v_name text;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+
+  -- Role is NEVER taken from the client. We re-read it from the trusted
+  -- auth.users.raw_user_meta_data the same way handle_new_user does, so a
+  -- caller cannot self-promote to 'instructor' by passing a forged arg.
+  select email, raw_user_meta_data into v_email, v_meta from auth.users where id = v_uid;
+  v_role := coalesce(v_meta->>'role', 'customer');
+  if v_role not in ('customer','instructor') then v_role := 'customer'; end if;
+  v_name := coalesce(nullif(p_name, ''), v_meta->>'name', '');
+  insert into public.users (id, email, name, role)
+    values (v_uid, v_email, v_name, v_role)
+    on conflict (id) do nothing;
+end;
+$$;
+
+grant execute on function ensure_my_user(text) to authenticated;
+
+------------------------------------------------------------
 -- Resorts
 ------------------------------------------------------------
 create table if not exists resorts (

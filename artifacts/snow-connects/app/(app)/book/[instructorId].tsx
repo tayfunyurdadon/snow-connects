@@ -1,10 +1,12 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -14,13 +16,18 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
-import { MonthCalendar } from "@/components/ui/MonthCalendar";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { formatDateTR, formatTRY } from "@/lib/format";
-import { isInSeason, nextSeasonStart } from "@/lib/season";
+import { formatTRY } from "@/lib/format";
+import {
+  addDays,
+  isInSeason,
+  isoDate,
+  nextSeasonStart,
+  stripTime,
+} from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
 import {
@@ -32,33 +39,90 @@ import {
   type TimeSlot,
 } from "@/lib/types";
 
-type Step = "date" | "slots" | "students" | "summary";
+const VISIBLE_DAYS = 7;
+const TR_DAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
+const TR_MONTHS_SHORT = [
+  "Oca",
+  "Şub",
+  "Mar",
+  "Nis",
+  "May",
+  "Haz",
+  "Tem",
+  "Ağu",
+  "Eyl",
+  "Eki",
+  "Kas",
+  "Ara",
+];
+
+interface Draft {
+  resortId: string | null;
+  date: string | null;
+  selectedSlots: string[];
+  studentCount: number;
+  students: StudentInput[];
+}
 
 export default function BookScreen() {
   const c = useColors();
   const router = useRouter();
   const { instructorId } = useLocalSearchParams<{ instructorId: string }>();
   const { session, loading: authLoading } = useAuth();
-  const today = new Date();
-  const initial = isInSeason(today) ? today : nextSeasonStart(today);
 
-  // Auth gate — booking requires a signed-in customer. Bounce to login
-  // with a `next` param so we return here after auth.
-  React.useEffect(() => {
-    if (authLoading || session) return;
-    const next = encodeURIComponent(`/book/${instructorId}`);
-    router.replace(`/(auth)/login?next=${next}` as never);
-  }, [authLoading, session, instructorId, router]);
+  const today = stripTime(new Date());
+  const initialDate = isInSeason(today) ? today : nextSeasonStart(today);
 
-  const [step, setStep] = useState<Step>("date");
-  const [date, setDate] = useState<string | null>(
-    initial.toISOString().slice(0, 10),
-  );
+  const [weekStart, setWeekStart] = useState<Date>(stripTime(initialDate));
   const [resortId, setResortId] = useState<string | null>(null);
+  const [date, setDate] = useState<string | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [studentCount, setStudentCount] = useState<number>(1);
   const [students, setStudents] = useState<StudentInput[]>([blankStudent()]);
   const [submitting, setSubmitting] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const draftKey = `pending_booking_${instructorId}`;
+
+  // Restore draft from a previous "Onayla" tap that bounced through login.
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(draftKey).then((str) => {
+      if (!mounted) return;
+      if (str) {
+        try {
+          const d = JSON.parse(str) as Draft;
+          if (d.resortId) setResortId(d.resortId);
+          if (d.date) {
+            setDate(d.date);
+            setWeekStart(stripTime(new Date(d.date)));
+          }
+          if (Array.isArray(d.selectedSlots)) setSelectedSlots(d.selectedSlots);
+          if (d.studentCount) setStudentCount(d.studentCount);
+          if (Array.isArray(d.students) && d.students.length > 0) {
+            setStudents(d.students);
+          }
+        } catch {
+          /* ignore corrupt draft */
+        }
+      }
+      setDraftHydrated(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [draftKey]);
+
+  const visibleDates = useMemo(() => {
+    const out: Date[] = [];
+    for (let i = 0; i < VISIBLE_DAYS; i++) out.push(addDays(weekStart, i));
+    return out;
+  }, [weekStart]);
+  const rangeStart = useMemo(() => isoDate(visibleDates[0]), [visibleDates]);
+  const rangeEnd = useMemo(
+    () => isoDate(visibleDates[visibleDates.length - 1]),
+    [visibleDates],
+  );
 
   const { data: instructor, isLoading } = useQuery({
     queryKey: ["instructor-book", instructorId],
@@ -88,40 +152,36 @@ export default function BookScreen() {
     enabled: !!instructor,
   });
 
+  // Fetch every existing time_slot for this instructor across the visible
+  // 7-day window so the grid can show "Dolu" cells in one query.
   const { data: existingSlots } = useQuery({
-    queryKey: ["slots", instructorId, date],
+    queryKey: ["slots-range", instructorId, rangeStart, rangeEnd],
     queryFn: async () => {
-      if (!date) return [] as TimeSlot[];
       const { data, error } = await supabase
         .from("time_slots")
         .select("*")
         .eq("instructor_id", instructorId)
-        .eq("date", date);
+        .gte("date", rangeStart)
+        .lte("date", rangeEnd);
       if (error) throw error;
       return (data ?? []) as TimeSlot[];
     },
-    enabled: !!date && !!instructorId,
+    enabled: !!instructorId,
   });
 
-  const takenSlots = useMemo(
-    () => new Set((existingSlots ?? []).map((s) => s.slot_time)),
-    [existingSlots],
-  );
+  const slotIndex = useMemo(() => {
+    const m = new Map<string, TimeSlot>();
+    (existingSlots ?? []).forEach((s) => m.set(`${s.date}|${s.slot_time}`, s));
+    return m;
+  }, [existingSlots]);
 
-  const totals = useMemo(() => {
-    // Price is per slot, not per student — group lessons share the rate.
-    const base = (instructor?.base_price ?? 0) * selectedSlots.length;
-    const vat = Math.round(base * 0.2);
-    return { base, vat, total: base + vat };
-  }, [instructor, selectedSlots.length]);
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (resorts && resorts.length === 1 && !resortId) {
       setResortId(resorts[0].id);
     }
   }, [resorts, resortId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setStudents((prev) => {
       const next = [...prev];
       while (next.length < studentCount) next.push(blankStudent());
@@ -130,52 +190,108 @@ export default function BookScreen() {
     });
   }, [studentCount]);
 
-  if (authLoading || !session) return <Loading />;
-  if (isLoading || !instructor) return <Loading />;
+  const totals = useMemo(() => {
+    const base = (instructor?.base_price ?? 0) * selectedSlots.length;
+    const vat = Math.round(base * 0.2);
+    return { base, vat, total: base + vat };
+  }, [instructor, selectedSlots.length]);
 
-  function toggleSlot(id: string) {
+  const customerPerSlot = Math.round((instructor?.base_price ?? 0) * 1.2);
+
+  if (isLoading || !instructor || !draftHydrated) return <Loading />;
+
+  function tapCell(cellDate: string, slotId: string) {
+    if (date !== cellDate) {
+      // Switching dates resets the slot selection — bookings are single-date.
+      setDate(cellDate);
+      setSelectedSlots([slotId]);
+      return;
+    }
     setSelectedSlots((cur) =>
-      cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id],
+      cur.includes(slotId) ? cur.filter((s) => s !== slotId) : [...cur, slotId],
     );
   }
 
-  function next() {
-    if (step === "date") {
-      if (!date || !resortId) {
-        Alert.alert("Eksik bilgi", "Tarih ve pist seçimi gerekli.");
-        return;
-      }
-      setStep("slots");
-    } else if (step === "slots") {
-      if (selectedSlots.length === 0) {
-        Alert.alert("Saat seçilmedi", "En az bir ders saati seç.");
-        return;
-      }
-      setStep("students");
-    } else if (step === "students") {
-      const ok = students.every(
-        (s) => s.firstName.trim() && s.lastName.trim() && s.age > 0,
-      );
-      if (!ok) {
-        Alert.alert(
-          "Eksik bilgi",
-          "Tüm öğrenciler için ad, soyad ve yaş girilmeli.",
-        );
-        return;
-      }
-      setStep("summary");
+  function shiftWeek(delta: number) {
+    setWeekStart((cur) => {
+      const next = addDays(cur, delta * VISIBLE_DAYS);
+      return next.getTime() < today.getTime() ? today : next;
+    });
+  }
+
+  async function persistDraft(): Promise<Draft> {
+    const draft: Draft = {
+      resortId,
+      date,
+      selectedSlots,
+      studentCount,
+      students,
+    };
+    try {
+      await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch {
+      /* non-fatal — proceed without persistence */
+    }
+    return draft;
+  }
+
+  async function clearDraft() {
+    try {
+      await AsyncStorage.removeItem(draftKey);
+    } catch {
+      /* ignore */
     }
   }
 
-  function back() {
-    if (step === "summary") setStep("students");
-    else if (step === "students") setStep("slots");
-    else if (step === "slots") setStep("date");
-    else router.back();
+  function validate(): string | null {
+    if (!resortId) return "Lütfen bir pist seçin.";
+    if (!date) return "Lütfen tarih ve saat seçin.";
+    if (selectedSlots.length === 0) return "En az bir saat seçin.";
+    const ok = students.every(
+      (s) => s.firstName.trim() && s.lastName.trim() && s.age > 0,
+    );
+    if (!ok) return "Tüm öğrenciler için ad, soyad ve yaş girilmeli.";
+    return null;
   }
 
   async function submit() {
-    if (!date || !resortId) return;
+    const err = validate();
+    if (err) {
+      Alert.alert("Eksik bilgi", err);
+      return;
+    }
+
+    // AUTH GATE — only at the final confirmation step. If the user is
+    // browsing as a guest, persist the draft and bounce to login. They
+    // come back to this screen with the draft re-hydrated.
+    //
+    // Note: we intentionally do NOT short-circuit on `authLoading`. If
+    // session is still resolving when the user taps "Onayla", we wait for
+    // it before deciding whether to bounce — otherwise a slow auth resolve
+    // could let a guest tap through to the create_booking RPC, which then
+    // 401s and loses the in-memory state.
+    if (authLoading) {
+      let resolved = session;
+      const start = Date.now();
+      while (!resolved && Date.now() - start < 2000) {
+        await new Promise((r) => setTimeout(r, 100));
+        const s = await supabase.auth.getSession();
+        resolved = s.data.session;
+        if (resolved) break;
+      }
+      if (!resolved) {
+        await persistDraft();
+        const next = encodeURIComponent(`/(app)/book/${instructorId}`);
+        router.push(`/(auth)/login?next=${next}` as never);
+        return;
+      }
+    } else if (!session) {
+      await persistDraft();
+      const next = encodeURIComponent(`/(app)/book/${instructorId}`);
+      router.push(`/(auth)/login?next=${next}` as never);
+      return;
+    }
+
     setSubmitting(true);
     const { data, error } = await supabase.rpc("create_booking", {
       p_instructor: instructorId,
@@ -189,17 +305,23 @@ export default function BookScreen() {
       Alert.alert("Rezervasyon başarısız", translateError(error.message));
       return;
     }
+    await clearDraft();
     const bookingId = (data as { booking_id: string }).booking_id;
     router.replace(`/(app)/payment/${bookingId}`);
   }
 
   return (
     <Screen contentStyle={{ gap: 16 }}>
-      <Stepper step={step} />
+      {!session ? (
+        <Pill
+          label="Misafir olarak inceleyebilirsiniz · ödeme öncesi giriş gerekir"
+          tone="accent"
+        />
+      ) : null}
 
-      {step === "date" && (
-        <>
-          <Text style={[styles.h, { color: c.foreground }]}>Pist seç</Text>
+      {(resorts ?? []).length > 1 ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[styles.h, { color: c.foreground }]}>Pist</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {(resorts ?? []).map((r) => {
               const active = r.id === resortId;
@@ -208,8 +330,8 @@ export default function BookScreen() {
                   key={r.id}
                   onPress={() => setResortId(r.id)}
                   style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
                     borderRadius: c.radius,
                     borderWidth: 1,
                     borderColor: active ? c.primary : c.border,
@@ -220,6 +342,7 @@ export default function BookScreen() {
                     style={{
                       color: active ? c.primary : c.foreground,
                       fontFamily: "Inter_500Medium",
+                      fontSize: 13,
                     }}
                   >
                     {r.name}
@@ -228,74 +351,61 @@ export default function BookScreen() {
               );
             })}
           </View>
+        </View>
+      ) : null}
 
-          <Text style={[styles.h, { color: c.foreground, marginTop: 8 }]}>
-            Tarih seç
+      <View style={{ gap: 8 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text style={[styles.h, { color: c.foreground }]}>
+            Tarih & saat seç
           </Text>
-          <Card>
-            <MonthCalendar value={date} onChange={setDate} seasonGate />
-          </Card>
-          <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-            Sezon 15 Aralık – 15 Nisan tarihleri arasında geçerlidir.
-          </Text>
-        </>
-      )}
-
-      {step === "slots" && (
-        <>
-          <Text style={[styles.h, { color: c.foreground }]}>Saat seç</Text>
-          <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
-            {date ? formatDateTR(date) : ""}
-          </Text>
-          <View style={{ gap: 8 }}>
-            {TIME_SLOTS.map((s) => {
-              const taken = takenSlots.has(s.id);
-              const selected = selectedSlots.includes(s.id);
-              return (
-                <Pressable
-                  key={s.id}
-                  disabled={taken}
-                  onPress={() => toggleSlot(s.id)}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    borderRadius: c.radius,
-                    borderWidth: 1,
-                    borderColor: selected ? c.primary : c.border,
-                    backgroundColor: selected
-                      ? c.secondary
-                      : taken
-                        ? c.muted
-                        : c.card,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    opacity: taken ? 0.6 : 1,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? c.primary : c.foreground,
-                      fontFamily: "Inter_600SemiBold",
-                    }}
-                  >
-                    {s.label}
-                  </Text>
-                  {taken ? (
-                    <Pill label="Dolu" tone="danger" />
-                  ) : selected ? (
-                    <Feather name="check-circle" size={18} color={c.primary} />
-                  ) : null}
-                </Pressable>
-              );
-            })}
+          <View style={{ flexDirection: "row", gap: 4 }}>
+            <Pressable
+              onPress={() => shiftWeek(-1)}
+              hitSlop={10}
+              disabled={weekStart.getTime() <= today.getTime()}
+              style={{
+                opacity: weekStart.getTime() <= today.getTime() ? 0.3 : 1,
+                padding: 4,
+              }}
+            >
+              <Feather name="chevron-left" size={22} color={c.foreground} />
+            </Pressable>
+            <Pressable
+              onPress={() => shiftWeek(1)}
+              hitSlop={10}
+              style={{ padding: 4 }}
+            >
+              <Feather name="chevron-right" size={22} color={c.foreground} />
+            </Pressable>
           </View>
-        </>
-      )}
+        </View>
 
-      {step === "students" && (
-        <>
-          <Text style={[styles.h, { color: c.foreground }]}>Öğrenci sayısı</Text>
+        <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+          Hücreye dokunarak fiyatı seçin · KDV dahil
+        </Text>
+
+        <SlotGrid
+          dates={visibleDates}
+          selectedDate={date}
+          selectedSlots={selectedSlots}
+          slotIndex={slotIndex}
+          customerPerSlot={customerPerSlot}
+          onTap={tapCell}
+        />
+      </View>
+
+      {selectedSlots.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <Text style={[styles.h, { color: c.foreground }]}>
+            Öğrenci sayısı
+          </Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {[1, 2, 3, 4].map((n) => {
               const active = studentCount === n;
@@ -398,7 +508,10 @@ export default function BookScreen() {
                           setStudents((arr) =>
                             arr.map((x, j) =>
                               j === i
-                                ? { ...x, experienceLevel: lvl.value as ExperienceLevel }
+                                ? {
+                                    ...x,
+                                    experienceLevel: lvl.value as ExperienceLevel,
+                                  }
                                 : x,
                             ),
                           )
@@ -437,29 +550,7 @@ export default function BookScreen() {
               </View>
             </Card>
           ))}
-        </>
-      )}
 
-      {step === "summary" && (
-        <>
-          <Text style={[styles.h, { color: c.foreground }]}>Özet</Text>
-          <Card>
-            <SummaryRow
-              icon="calendar"
-              label="Tarih"
-              value={date ? formatDateTR(date) : ""}
-            />
-            <SummaryRow
-              icon="clock"
-              label="Saatler"
-              value={selectedSlots.sort().join(", ")}
-            />
-            <SummaryRow
-              icon="users"
-              label="Öğrenci sayısı"
-              value={String(studentCount)}
-            />
-          </Card>
           <Card>
             <PriceRow label="Ders ücreti" value={formatTRY(totals.base)} />
             <PriceRow label="KDV (%20)" value={formatTRY(totals.vat)} />
@@ -476,26 +567,224 @@ export default function BookScreen() {
               bold
             />
           </Card>
-        </>
-      )}
 
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
-        <View style={{ flex: 1 }}>
-          <Button label="Geri" variant="ghost" onPress={back} />
+          <Button
+            label={
+              !session
+                ? `Onayla ve giriş yap · ${formatTRY(totals.total)}`
+                : `Onayla · ${formatTRY(totals.total)}`
+            }
+            onPress={submit}
+            loading={submitting}
+          />
+          {!session ? (
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontSize: 11,
+                textAlign: "center",
+              }}
+            >
+              Giriş yaptıktan sonra rezervasyonunuz buradan kaldığı yerden devam
+              eder.
+            </Text>
+          ) : null}
         </View>
-        <View style={{ flex: 2 }}>
-          {step === "summary" ? (
-            <Button
-              label="Ödemeye Geç"
-              onPress={submit}
-              loading={submitting}
-            />
-          ) : (
-            <Button label="Devam" onPress={next} />
-          )}
+      ) : (
+        <View style={{ alignItems: "center", paddingVertical: 24, gap: 8 }}>
+          <Feather name="calendar" size={28} color={c.mutedForeground} />
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontSize: 13,
+              textAlign: "center",
+            }}
+          >
+            Devam etmek için yukarıdan en az bir saat seçin.
+          </Text>
         </View>
-      </View>
+      )}
     </Screen>
+  );
+}
+
+function SlotGrid({
+  dates,
+  selectedDate,
+  selectedSlots,
+  slotIndex,
+  customerPerSlot,
+  onTap,
+}: {
+  dates: Date[];
+  selectedDate: string | null;
+  selectedSlots: string[];
+  slotIndex: Map<string, TimeSlot>;
+  customerPerSlot: number;
+  onTap: (date: string, slotId: string) => void;
+}) {
+  const c = useColors();
+  const dateColW = 72;
+  const cellW = 58;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingRight: 16 }}
+    >
+      <View style={{ borderRadius: c.radius, overflow: "hidden" }}>
+        {/* Header row: time slot labels */}
+        <View style={{ flexDirection: "row" }}>
+          <View
+            style={[
+              gridStyles.headerCell,
+              { width: dateColW, backgroundColor: c.muted },
+            ]}
+          />
+          {TIME_SLOTS.map((s) => (
+            <View
+              key={s.id}
+              style={[
+                gridStyles.headerCell,
+                {
+                  width: cellW,
+                  backgroundColor: c.muted,
+                  borderLeftColor: c.border,
+                  borderLeftWidth: 1,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 11,
+                }}
+              >
+                {s.id}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Body rows: one per date */}
+        {dates.map((d) => {
+          const iso = isoDate(d);
+          const inSeason = isInSeason(d);
+          const dayLabel = TR_DAYS[d.getDay()];
+          const monthLabel = TR_MONTHS_SHORT[d.getMonth()];
+          return (
+            <View
+              key={iso}
+              style={{
+                flexDirection: "row",
+                borderTopWidth: 1,
+                borderTopColor: c.border,
+              }}
+            >
+              <View
+                style={[
+                  gridStyles.dateCell,
+                  { width: dateColW, backgroundColor: c.card },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: c.mutedForeground,
+                    fontSize: 10,
+                    fontFamily: "Inter_500Medium",
+                  }}
+                >
+                  {dayLabel}
+                </Text>
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Inter_700Bold",
+                    fontSize: 16,
+                  }}
+                >
+                  {d.getDate()}
+                </Text>
+                <Text style={{ color: c.mutedForeground, fontSize: 10 }}>
+                  {monthLabel}
+                </Text>
+              </View>
+              {TIME_SLOTS.map((s) => {
+                const existing = slotIndex.get(`${iso}|${s.id}`);
+                const taken =
+                  !!existing && existing.status !== "available";
+                const selected =
+                  selectedDate === iso && selectedSlots.includes(s.id);
+                const disabled = !inSeason || taken;
+                const bg = !inSeason
+                  ? c.muted
+                  : taken
+                    ? c.muted
+                    : selected
+                      ? c.primary
+                      : c.card;
+                const fg = !inSeason
+                  ? c.mutedForeground
+                  : taken
+                    ? c.mutedForeground
+                    : selected
+                      ? c.primaryForeground
+                      : c.foreground;
+                return (
+                  <Pressable
+                    key={s.id}
+                    disabled={disabled}
+                    onPress={() => onTap(iso, s.id)}
+                    style={{
+                      width: cellW,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: bg,
+                      borderLeftWidth: 1,
+                      borderLeftColor: c.border,
+                      opacity: disabled ? 0.55 : 1,
+                    }}
+                  >
+                    {!inSeason ? (
+                      <Feather
+                        name="x"
+                        size={14}
+                        color={c.mutedForeground}
+                      />
+                    ) : taken ? (
+                      <Text
+                        style={{
+                          color: fg,
+                          fontFamily: "Inter_500Medium",
+                          fontSize: 11,
+                        }}
+                      >
+                        Dolu
+                      </Text>
+                    ) : (
+                      <Text
+                        style={{
+                          color: fg,
+                          fontFamily: selected
+                            ? "Inter_700Bold"
+                            : "Inter_600SemiBold",
+                          fontSize: 11,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {formatTRY(customerPerSlot)}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -506,69 +795,11 @@ function blankStudent(): StudentInput {
 function translateError(msg: string): string {
   if (msg.includes("season closed")) return "Bu tarih sezon dışında.";
   if (msg.includes("slot taken")) return "Seçili saatlerden biri dolu.";
-  if (msg.includes("blocked")) return "Hesabınız bloke. Lütfen destek ile iletişime geçin.";
-  if (msg.includes("not authenticated")) return "Oturum süreniz doldu, tekrar giriş yapın.";
+  if (msg.includes("blocked"))
+    return "Hesabınız bloke. Lütfen destek ile iletişime geçin.";
+  if (msg.includes("not authenticated"))
+    return "Oturum süreniz doldu, tekrar giriş yapın.";
   return msg;
-}
-
-function Stepper({ step }: { step: Step }) {
-  const c = useColors();
-  const order: Step[] = ["date", "slots", "students", "summary"];
-  return (
-    <View style={{ flexDirection: "row", gap: 6 }}>
-      {order.map((s, i) => {
-        const idx = order.indexOf(step);
-        const active = i <= idx;
-        return (
-          <View
-            key={s}
-            style={{
-              flex: 1,
-              height: 4,
-              borderRadius: 4,
-              backgroundColor: active ? c.primary : c.muted,
-            }}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
-function SummaryRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  value: string;
-}) {
-  const c = useColors();
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        paddingVertical: 6,
-      }}
-    >
-      <Feather name={icon} size={18} color={c.primary} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: c.mutedForeground, fontSize: 12 }}>{label}</Text>
-        <Text
-          style={{
-            color: c.foreground,
-            fontFamily: "Inter_500Medium",
-            fontSize: 14,
-          }}
-        >
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
 }
 
 function PriceRow({
@@ -612,4 +843,18 @@ function PriceRow({
 
 const styles = StyleSheet.create({
   h: { fontFamily: "Inter_700Bold", fontSize: 18 },
+});
+
+const gridStyles = StyleSheet.create({
+  headerCell: {
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateCell: {
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+  },
 });
