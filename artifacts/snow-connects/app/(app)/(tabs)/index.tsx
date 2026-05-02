@@ -488,6 +488,30 @@ function InstructorHome() {
         <Card
           style={{ flex: 1 }}
           padding={16}
+          onPress={() => router.push("/(app)/instructor-panel/payments")}
+        >
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="credit-card" size={18} color={c.accentDeep} />
+          </View>
+          <Text style={[styles.tileTitle, { color: c.foreground }]}>
+            Ödemelerim
+          </Text>
+          <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+            Kazanç & raporlar
+          </Text>
+        </Card>
+        <Card
+          style={{ flex: 1 }}
+          padding={16}
           onPress={() => router.push("/(app)/instructor-panel/setup")}
         >
           <View

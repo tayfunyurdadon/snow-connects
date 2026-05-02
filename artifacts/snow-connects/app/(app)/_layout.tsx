@@ -48,6 +48,14 @@ export default function AppLayout() {
         name="instructor-panel/setup"
         options={{ title: "Profil Kurulumu" }}
       />
+      <Stack.Screen
+        name="instructor-panel/payments"
+        options={{ title: "Ödemelerim" }}
+      />
+      <Stack.Screen
+        name="instructor-panel/payment/[id]"
+        options={{ title: "Ödeme Detayı" }}
+      />
       <Stack.Screen name="admin/index" options={{ title: "Yönetici Paneli" }} />
     </Stack>
   );
