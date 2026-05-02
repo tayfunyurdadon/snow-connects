@@ -1,0 +1,155 @@
+Build a full-stack mobile-first native application called "Snow Connects" using the following tech stack:
+
+TECH STACK:
+- Frontend: React Native + Expo (iOS & Android)
+- Backend: Node.js + Express (REST API)
+- Database: Supabase (PostgreSQL + Auth + Realtime)
+- Payments: iyzico (Turkey)
+- Real-time Messaging: Supabase Realtime channels
+- Push Notifications: Expo Notifications
+- Deployment: Railway (backend), Expo EAS Build (mobile app)
+
+DO NOT build a web app. This must be a native mobile application using React Native + Expo.
+
+---
+
+USER ROLES:
+1. Customer
+2. Instructor
+3. Admin
+
+---
+
+CUSTOMER FEATURES:
+
+1. RESORT SELECTION
+- First screen after login: select a ski resort
+- Options: Sarıkamış, Palandöken, Uludağ, Kartalkaya, Erciyes, Ilgaz, Ergan
+
+2. INSTRUCTOR DISCOVERY
+- After resort selection: show instructors at that resort
+- Each instructor card shows: photo, name, rating, price/hour (VAT included)
+- Instructor profile page: bio, certifications, experience, reviews, availability calendar
+
+3. BOOKING FLOW
+- Select instructor → view calendar → pick date and time slot(s)
+- Season: December 15 – April 15 only (booking disabled outside this range)
+- Daily time slots:
+  09:00–09:50 / 10:00–10:50 / 11:00–11:50 / 12:00–12:50
+  13:00–13:50 / 14:00–14:50 / 15:00–15:50 / 16:00–16:50
+- Select number of students: 1 / 2 / 3 / 4 or more
+
+4. STUDENT INFORMATION
+- For each student, collect:
+  - First name, last name, age
+  - Experience level:
+    * First time ever
+    * 0–8 hours experience
+    * 9–20 hours experience
+    * 21–50 hours experience
+    * 51+ hours experience
+
+5. PRICING
+- Price shown to customer = instructor's base price + VAT (auto-calculated)
+- VAT rate configurable in admin panel
+
+6. PAYMENT
+- Full payment via iyzico inside the app
+- On successful payment: instructor calendar slot auto-blocked
+
+7. IN-APP MESSAGING
+- Customer ↔ Instructor messaging via Supabase Realtime
+- Contact info sharing strictly forbidden (phone numbers, emails, URLs)
+- Auto-detect contact info using regex on every message sent
+- Instructor strike system:
+  * 1st attempt: warning shown
+  * 2nd attempt: warning shown
+  * 3rd attempt: account automatically blocked
+- Customer violations: flagged for admin review
+
+8. CUSTOMER PROFILE
+- Past lessons: date, resort, instructor, duration, number of students
+- Upcoming reservations with status
+- Payment history
+
+---
+
+INSTRUCTOR PANEL FEATURES:
+
+1. PROFILE SETUP
+- Photo, bio, certifications, years of experience
+- Select resort(s) they work at (multi-select)
+- Set base hourly price (system adds VAT automatically for customer display)
+
+2. CALENDAR MANAGEMENT
+- Full calendar view: December 15 – April 15
+- 8 time slots per day as listed above
+- Slot states:
+  * Available (green)
+  * Booked via platform (blue — paid, locked)
+  * Manually blocked (gray — instructor blocks for outside bookings, no payment)
+- Instructor can manually block any available slot with a note
+
+3. PAYOUT SYSTEM
+- Platform commission: 3% per booking
+- Instructor payout: 21 business days after lesson completion
+- Business day calculation: exclude weekends + Turkish public holidays
+- Cron job runs daily to release eligible payouts
+- Instructor dashboard shows:
+  * Pending payouts with expected release date
+  * Released payouts
+  * Total earnings and commission deducted per transaction
+
+---
+
+ADMIN PANEL FEATURES:
+- Approve / suspend / block instructors
+- View all bookings and transactions
+- Review flagged messages and resolve customer violations
+- Manual override for blocked accounts
+- Payout management: view schedule, manually trigger or delay payouts
+- VAT rate configuration
+- Resort and instructor assignment management
+
+---
+
+DATABASE MODELS:
+
+User: id, name, email, phone, role (customer/instructor/admin), status, strikeCount, createdAt
+
+InstructorProfile: userId, bio, photo, certifications, experienceYears, basePrice, resorts[]
+
+Resort: id, name, region
+
+TimeSlot: id, instructorId, date, slotTime, status (available/booked/manual), bookingId?, note?
+
+Booking: id, customerId, instructorId, resortId, slotIds[], studentCount, totalPrice, vatAmount, commissionAmount, paymentStatus, lessonStatus, createdAt
+
+Student: id, bookingId, firstName, lastName, age, experienceLevel
+
+Message: id, senderId, receiverId, content, flagged, flagReason?, timestamp
+
+Payout: id, instructorId, bookingId, grossAmount, commission, netAmount, lessonDate, releaseDate, status (pending/released)
+
+---
+
+KEY TECHNICAL REQUIREMENTS:
+
+- Contact info regex filter: must detect Turkish phone formats (+90, 0532 etc.), email addresses, and URLs in real time before message is sent
+- Strike counter: stored in User table, auto-block on 3rd strike for instructors
+- VAT: applied server-side on all price calculations, never client-side only
+- 21 business day calculation: use a Turkish public holiday list, exclude Saturdays and Sundays
+- Calendar: block slots immediately on payment webhook confirmation from iyzico
+- Season gate: API must reject booking requests outside Dec 15 – Apr 15
+- All money values stored in smallest currency unit (kuruş)
+- Push notifications for: booking confirmation, new message, payout released, slot blocked
+
+---
+
+DESIGN:
+- Native mobile UI using React Native components (not web CSS)
+- Winter / ski aesthetic: white, deep navy, ice blue, subtle snowflake motifs
+- Primary language: Turkish
+- Clean, fast, minimal tap flows — booking should complete in under 5 taps
+- Use Expo Router for navigation
+- Use React Native Paper or NativeWind for UI components
