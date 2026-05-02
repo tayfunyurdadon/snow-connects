@@ -1,27 +1,19 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading } from "@/components/ui/Loading";
+import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { isInSeason, getSeasonForDate } from "@/lib/season";
 import { formatDateTR } from "@/lib/format";
-import { getResortHero } from "@/lib/resortImages";
-import { getSeasonForDate, isInSeason } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import type { Resort } from "@/lib/types";
 
@@ -31,6 +23,7 @@ export default function HomeTab() {
 
   if (user?.role === "instructor") return <InstructorHome />;
   if (user?.role === "admin") return <AdminHome />;
+  // Customers AND guests both see the resort browser.
   return <CustomerHome />;
 }
 
@@ -55,342 +48,132 @@ function CustomerHome() {
   });
 
   return (
-    <>
     <Screen
-      padded={false}
-      contentStyle={{ paddingBottom: 180, gap: 0 }}
+      contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}
       refreshing={isRefetching}
       onRefresh={refetch}
-      hasHeader
     >
-      <BrandHeader
-        topInset={insets.top}
-        userName={user?.name?.split(" ")[0]}
-        onSignIn={!user ? () => router.push("/(auth)/login") : undefined}
-      />
-
-      <View style={{ paddingHorizontal: 22, paddingTop: 28, gap: 10 }}>
-        <DashLabel label="Snow Connects · 2026" />
-        <View>
-          <Text
-            style={{
-              color: c.foreground,
-              fontFamily: "PlayfairDisplay_700Bold",
-              fontSize: 40,
-              lineHeight: 46,
-              letterSpacing: -0.5,
-            }}
-          >
-            The summit
-          </Text>
-          <Text
-            style={{
-              color: c.foreground,
-              fontFamily: "PlayfairDisplay_600SemiBold",
-              fontSize: 36,
-              lineHeight: 42,
-              letterSpacing: -0.3,
-              opacity: 0.55,
-              marginTop: 2,
-            }}
-          >
-            of our dreams.
-          </Text>
-        </View>
-        <Text
-          style={{
-            color: c.mutedForeground,
-            fontSize: 13,
-            lineHeight: 20,
-            marginTop: 8,
-            letterSpacing: 0.3,
-          }}
-        >
-          KIŞ SEZONU: 1 ARALIK 2025 — 30 NİSAN 2026
+      <View>
+        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
+          Hoş geldin
+        </Text>
+        <Text style={[styles.name, { color: c.foreground }]}>
+          {user?.name?.split(" ")[0] || "Kayakçı"}
         </Text>
       </View>
 
-      {!seasonOpen && (
-        <View style={{ paddingHorizontal: 22, marginTop: 18 }}>
+      {!user && (
+        <Card
+          onPress={() => router.push("/(auth)/login")}
+          style={{ backgroundColor: c.primary }}
+        >
           <View
-            style={{
-              flexDirection: "row",
-              gap: 10,
-              alignItems: "center",
-              borderLeftWidth: 3,
-              borderLeftColor: c.accent,
-              paddingLeft: 12,
-              paddingVertical: 8,
-            }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
           >
+            <Feather name="user-plus" size={20} color={c.primaryForeground} />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: c.primaryForeground,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 14,
+                }}
+              >
+                Hesabınla daha fazlasını yap
+              </Text>
+              <Text
+                style={{
+                  color: c.primaryForeground,
+                  opacity: 0.85,
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                Rezervasyon, mesajlaşma ve ders takibi için giriş yap.
+              </Text>
+            </View>
+            <Feather
+              name="chevron-right"
+              size={20}
+              color={c.primaryForeground}
+            />
+          </View>
+        </Card>
+      )}
+
+      {!seasonOpen && (
+        <Card style={{ backgroundColor: c.secondary, borderColor: c.accent }}>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+            <Feather name="info" size={18} color={c.primary} />
             <Text
               style={{
                 color: c.foreground,
                 fontFamily: "Inter_500Medium",
-                fontSize: 12,
+                fontSize: 13,
                 flex: 1,
               }}
             >
-              Sezon kapalı. Yeni sezon {formatDateTR(season.start)} tarihinde
-              başlıyor.
+              Sezon kapalı. Yeni sezon {formatDateTR(season.start)}
+              {" "}
+              tarihinde başlıyor.
             </Text>
           </View>
-        </View>
+        </Card>
       )}
 
-      <View style={{ paddingHorizontal: 22, marginTop: 32, gap: 18 }}>
-        {isLoading ? (
-          <Loading inline />
-        ) : !data || data.length === 0 ? (
-          <EmptyState
-            icon="map"
-            title="Pistler yüklenemedi"
-            description="Lütfen bağlantını kontrol et ve sayfayı yenile."
-          />
-        ) : (
-          data.map((r, i) => (
-            <ResortHeroCard
-              key={r.id}
-              resort={r}
-              index={i}
-              onPress={() => router.push(`/(app)/resort/${r.id}`)}
-            />
-          ))
-        )}
-      </View>
-    </Screen>
-    <BookingBar />
-    </>
-  );
-}
-
-function BookingBar() {
-  const c = useColors();
-  return (
-    <View
-      pointerEvents="box-none"
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 84,
-        paddingHorizontal: 14,
-        paddingBottom: 10,
-      }}
-    >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-          backgroundColor: c.primary,
-          paddingVertical: 10,
-          paddingLeft: 16,
-          paddingRight: 10,
-          borderRadius: 14,
-          ...(Platform.OS === "web"
-            ? { boxShadow: "0 12px 28px rgba(10,22,40,0.25)" }
-            : {
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.25,
-                shadowRadius: 16,
-                elevation: 10,
-              }),
-        }}
-      >
-        <Feather name="search" size={16} color="#fff" />
-        <Text
-          style={{
-            color: "#fff",
-            fontFamily: "Inter_500Medium",
-            fontSize: 13,
-            flex: 1,
-          }}
-        >
-          Pist veya eğitmen ara
+      <View style={{ gap: 4 }}>
+        <Text style={[styles.h2, { color: c.foreground }]}>
+          Bir kayak merkezi seç
         </Text>
-        <View
-          style={{
-            backgroundColor: c.accent,
-            paddingVertical: 10,
-            paddingHorizontal: 18,
-            borderRadius: 10,
-          }}
-        >
-          <Text
-            style={{
-              color: "#fff",
-              fontFamily: "Inter_700Bold",
-              fontSize: 12,
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-            }}
-          >
-            Rezervasyon
-          </Text>
-        </View>
+        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>
+          Türkiye'nin en iyi 7 pisti, kapındaki gibi.
+        </Text>
       </View>
-    </View>
-  );
-}
 
-function DashLabel({ label }: { label: string }) {
-  const c = useColors();
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-      <View style={{ width: 28, height: 2, backgroundColor: c.accent }} />
-      <Text
-        style={{
-          color: c.foreground,
-          fontFamily: "Inter_700Bold",
-          fontSize: 11,
-          letterSpacing: 2.5,
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function BrandHeader({
-  topInset,
-  userName,
-  onSignIn,
-}: {
-  topInset: number;
-  userName?: string;
-  onSignIn?: () => void;
-}) {
-  const c = useColors();
-  return (
-    <View
-      style={{
-        backgroundColor: c.primary,
-        paddingTop: topInset + 14,
-        paddingBottom: 16,
-        paddingHorizontal: 22,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <View
-          style={{
-            width: 16,
-            height: 16,
-            backgroundColor: c.accent,
-            transform: [{ rotate: "45deg" }],
-          }}
+      {isLoading ? (
+        <Loading inline />
+      ) : !data || data.length === 0 ? (
+        <EmptyState
+          icon="map"
+          title="Pistler yüklenemedi"
+          description="Lütfen bağlantını kontrol et ve sayfayı yenile."
         />
-        <Text
-          style={{
-            color: c.primaryForeground,
-            fontFamily: "PlayfairDisplay_700Bold",
-            fontSize: 20,
-            letterSpacing: 0.5,
-          }}
-        >
-          Snow Connects
-        </Text>
-      </View>
-      {onSignIn ? (
-        <Pressable onPress={onSignIn} hitSlop={8}>
-          <Text
-            style={{
-              color: c.primaryForeground,
-              fontFamily: "Inter_600SemiBold",
-              fontSize: 11,
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-            }}
-          >
-            Giriş yap
-          </Text>
-        </Pressable>
-      ) : userName ? (
-        <Text
-          style={{
-            color: c.primaryForeground,
-            opacity: 0.85,
-            fontSize: 12,
-            fontFamily: "Inter_500Medium",
-          }}
-        >
-          {userName}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function ResortHeroCard({
-  resort,
-  index,
-  onPress,
-}: {
-  resort: Resort;
-  index: number;
-  onPress: () => void;
-}) {
-  const c = useColors();
-  const hero = getResortHero(resort.name);
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [
-      styles.hero,
-      pressed && { opacity: 0.95 },
-    ]}>
-      <Image
-        source={{ uri: hero }}
-        style={StyleSheet.absoluteFillObject}
-        contentFit="cover"
-        transition={250}
-      />
-      <LinearGradient
-        colors={["rgba(10,22,40,0.05)", "rgba(10,22,40,0.85)"]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <View style={styles.heroIndex}>
-        <Text
-          style={{
-            color: "#fff",
-            fontFamily: "PlayfairDisplay_700Bold_Italic",
-            fontSize: 14,
-            letterSpacing: 1,
-          }}
-        >
-          № {String(index + 1).padStart(2, "0")}
-        </Text>
-      </View>
-      <View style={styles.heroBody}>
-        <View
-          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-        >
-          <View
-            style={{ width: 22, height: 2, backgroundColor: c.accent }}
-          />
-          <Text style={styles.heroRegion}>{resort.region.toUpperCase()}</Text>
+      ) : (
+        <View style={{ gap: 12 }}>
+          {data.map((r) => (
+            <Card
+              key={r.id}
+              onPress={() => router.push(`/(app)/resort/${r.id}`)}
+            >
+              <View style={styles.row}>
+                <View
+                  style={[
+                    styles.iconBox,
+                    {
+                      backgroundColor: c.secondary,
+                      borderRadius: c.radius,
+                    },
+                  ]}
+                >
+                  <Feather name="triangle" size={22} color={c.primary} />
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={[styles.cardTitle, { color: c.foreground }]}>
+                    {r.name}
+                  </Text>
+                  <Pill label={r.region} tone="accent" />
+                </View>
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={c.mutedForeground}
+                />
+              </View>
+            </Card>
+          ))}
         </View>
-        <Text style={styles.heroTitle}>{resort.name}</Text>
-        <View style={styles.heroCta}>
-          <View
-            style={{
-              width: 10,
-              height: 10,
-              backgroundColor: c.accent,
-              transform: [{ rotate: "45deg" }],
-              marginRight: 10,
-            }}
-          />
-          <Text style={styles.heroCtaText}>Eğitmenleri keşfet</Text>
-        </View>
-      </View>
-    </Pressable>
+      )}
+    </Screen>
   );
 }
 
@@ -418,12 +201,12 @@ function InstructorHome() {
   });
 
   return (
-    <Screen contentStyle={{ paddingTop: insets.top + 18, gap: 18 }}>
+    <Screen contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}>
       <View>
-        <Text style={[styles.eyebrow, { color: c.accent }]}>
+        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
           Eğitmen Paneli
         </Text>
-        <Text style={[styles.displayLg, { color: c.foreground }]}>
+        <Text style={[styles.name, { color: c.foreground }]}>
           {user?.name?.split(" ")[0] || "Eğitmen"}
         </Text>
       </View>
@@ -433,7 +216,7 @@ function InstructorHome() {
           style={{ flex: 1 }}
           onPress={() => router.push("/(app)/instructor-panel/calendar")}
         >
-          <Feather name="calendar" size={22} color={c.accent} />
+          <Feather name="calendar" size={22} color={c.primary} />
           <Text style={[styles.tileTitle, { color: c.foreground }]}>
             Takvimim
           </Text>
@@ -445,7 +228,7 @@ function InstructorHome() {
           style={{ flex: 1 }}
           onPress={() => router.push("/(app)/instructor-panel/setup")}
         >
-          <Feather name="user-check" size={22} color={c.accent} />
+          <Feather name="user-check" size={22} color={c.primary} />
           <Text style={[styles.tileTitle, { color: c.foreground }]}>
             Profilim
           </Text>
@@ -455,9 +238,7 @@ function InstructorHome() {
         </Card>
       </View>
 
-      <Text style={[styles.h2Serif, { color: c.foreground }]}>
-        Yaklaşan dersler
-      </Text>
+      <Text style={[styles.h2, { color: c.foreground }]}>Yaklaşan dersler</Text>
       {!bookings || bookings.length === 0 ? (
         <EmptyState
           icon="calendar"
@@ -467,9 +248,7 @@ function InstructorHome() {
       ) : (
         bookings.map((b) => (
           <Card key={b.id}>
-            <Text
-              style={{ color: c.foreground, fontFamily: "Inter_600SemiBold" }}
-            >
+            <Text style={{ color: c.foreground, fontFamily: "Inter_600SemiBold" }}>
               {formatDateTR(b.lesson_date)}
             </Text>
           </Card>
@@ -505,21 +284,19 @@ function AdminHome() {
   });
 
   return (
-    <Screen contentStyle={{ paddingTop: insets.top + 18, gap: 18 }}>
+    <Screen contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}>
       <View>
-        <Text style={[styles.eyebrow, { color: c.accent }]}>Yönetici</Text>
-        <Text style={[styles.displayLg, { color: c.foreground }]}>
+        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
+          Yönetici
+        </Text>
+        <Text style={[styles.name, { color: c.foreground }]}>
           {user?.name?.split(" ")[0] || "Admin"}
         </Text>
       </View>
 
       <View style={{ flexDirection: "row", gap: 12 }}>
         <StatCard label="Kullanıcı" value={stats?.users ?? 0} icon="users" />
-        <StatCard
-          label="Rezervasyon"
-          value={stats?.bookings ?? 0}
-          icon="calendar"
-        />
+        <StatCard label="Rezervasyon" value={stats?.bookings ?? 0} icon="calendar" />
         <StatCard
           label="Bildirim"
           value={stats?.flagged ?? 0}
@@ -529,36 +306,24 @@ function AdminHome() {
       </View>
 
       <Card onPress={() => router.push("/(app)/admin")}>
-        <View
-          style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-        >
+        <View style={styles.row}>
           <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              backgroundColor: c.secondary,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            style={[
+              styles.iconBox,
+              { backgroundColor: c.secondary, borderRadius: c.radius },
+            ]}
           >
             <Feather name="shield" size={22} color={c.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: c.foreground,
-                fontFamily: "Inter_600SemiBold",
-                fontSize: 16,
-              }}
-            >
+            <Text style={[styles.cardTitle, { color: c.foreground }]}>
               Yönetici Paneli
             </Text>
             <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
               Eğitmenler, rezervasyonlar ve bildirilen mesajlar
             </Text>
           </View>
-          <Feather name="chevron-right" size={20} color={c.accent} />
+          <Feather name="chevron-right" size={20} color={c.mutedForeground} />
         </View>
       </Card>
     </Screen>
@@ -578,23 +343,25 @@ function StatCard({
 }) {
   const c = useColors();
   return (
-    <Card style={{ flex: 1, padding: 14 }}>
+    <Card style={{ flex: 1, padding: 12 }}>
       <Feather
         name={icon}
         size={18}
-        color={tone === "warning" ? c.warning : c.accent}
+        color={tone === "warning" ? c.warning : c.primary}
       />
       <Text
         style={{
           color: c.foreground,
-          fontFamily: "PlayfairDisplay_700Bold",
-          fontSize: 26,
-          marginTop: 8,
+          fontFamily: "Inter_700Bold",
+          fontSize: 22,
+          marginTop: 6,
         }}
       >
         {value}
       </Text>
-      <Text style={{ color: c.mutedForeground, fontSize: 11, marginTop: 2 }}>
+      <Text
+        style={{ color: c.mutedForeground, fontSize: 11, marginTop: 2 }}
+      >
         {label}
       </Text>
     </Card>
@@ -602,66 +369,20 @@ function StatCard({
 }
 
 const styles = StyleSheet.create({
-  eyebrow: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: "uppercase",
+  greeting: { fontFamily: "Inter_400Regular", fontSize: 14 },
+  name: { fontFamily: "Inter_700Bold", fontSize: 26, letterSpacing: -0.5 },
+  h2: { fontFamily: "Inter_600SemiBold", fontSize: 17 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconBox: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  displayLg: {
-    fontFamily: "PlayfairDisplay_700Bold",
-    fontSize: 32,
-    letterSpacing: -0.5,
-    marginTop: 4,
-  },
-  h2Serif: {
-    fontFamily: "PlayfairDisplay_700Bold",
-    fontSize: 22,
-  },
+  cardTitle: { fontFamily: "Inter_600SemiBold", fontSize: 16 },
   tileTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
     marginTop: 8,
-  },
-  hero: {
-    height: 360,
-    borderRadius: 4,
-    overflow: "hidden",
-    backgroundColor: "#0A1628",
-    justifyContent: "flex-end",
-  },
-  heroIndex: {
-    position: "absolute",
-    top: 18,
-    right: 20,
-  },
-  heroBody: {
-    padding: 22,
-    gap: 6,
-  },
-  heroRegion: {
-    color: "rgba(255,255,255,0.92)",
-    fontFamily: "Inter_700Bold",
-    fontSize: 11,
-    letterSpacing: 2.5,
-  },
-  heroTitle: {
-    color: "#ffffff",
-    fontFamily: "PlayfairDisplay_700Bold",
-    fontSize: 38,
-    letterSpacing: -0.5,
-    lineHeight: 44,
-  },
-  heroCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  heroCtaText: {
-    color: "#ffffff",
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
   },
 });
