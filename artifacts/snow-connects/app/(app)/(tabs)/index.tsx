@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
@@ -20,10 +21,8 @@ import type { Resort } from "@/lib/types";
 export default function HomeTab() {
   const { user, loading } = useAuth();
   if (loading) return <Loading />;
-
   if (user?.role === "instructor") return <InstructorHome />;
   if (user?.role === "admin") return <AdminHome />;
-  // Customers AND guests both see the resort browser.
   return <CustomerHome />;
 }
 
@@ -47,30 +46,68 @@ function CustomerHome() {
     },
   });
 
+  const firstName = user?.name?.split(" ")[0];
+
   return (
     <Screen
-      contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}
+      contentStyle={{ paddingTop: insets.top + 16, gap: 22 }}
       refreshing={isRefetching}
       onRefresh={refetch}
     >
-      <View>
-        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
-          Hoş geldin
-        </Text>
-        <Text style={[styles.name, { color: c.foreground }]}>
-          {user?.name?.split(" ")[0] || "Kayakçı"}
-        </Text>
+      {/* HERO — editorial greeting that sets the tone */}
+      <View style={{ gap: 16 }}>
+        <View style={styles.brandRow}>
+          <View style={[styles.brandMark, { backgroundColor: c.primary }]}>
+            <Feather name="triangle" size={13} color={c.accent} />
+          </View>
+          <Text style={[styles.brandWord, { color: c.foreground }]}>
+            Snow Connects
+          </Text>
+          <View style={{ flex: 1 }} />
+          {seasonOpen ? (
+            <View style={[styles.seasonDot, { backgroundColor: c.accent }]} />
+          ) : null}
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 11,
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+            }}
+          >
+            {seasonOpen ? "Sezon açık" : "Sezon dışı"}
+          </Text>
+        </View>
+
+        <Header
+          eyebrow={firstName ? `Hoş geldin, ${firstName}` : "Hoş geldin"}
+          title={`Karın altında\nseni bekleyen biri var.`}
+          subtitle="Türkiye'nin en sevilen pistleri ve oradaki en deneyimli eğitmenler. Bir gün seç, gerisi bizde."
+        />
       </View>
 
       {!user && (
         <Card
+          tone="ink"
           onPress={() => router.push("/(auth)/login")}
-          style={{ backgroundColor: c.primary }}
+          padding={18}
         >
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 14 }}
           >
-            <Feather name="user-plus" size={20} color={c.primaryForeground} />
+            <View
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: c.accent,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Feather name="user-plus" size={18} color={c.accentForeground} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text
                 style={{
@@ -84,17 +121,18 @@ function CustomerHome() {
               <Text
                 style={{
                   color: c.primaryForeground,
-                  opacity: 0.85,
+                  opacity: 0.72,
+                  fontFamily: "Inter_400Regular",
                   fontSize: 12,
                   marginTop: 2,
                 }}
               >
-                Rezervasyon, mesajlaşma ve ders takibi için giriş yap.
+                Rezervasyon, mesajlaşma ve ders takibi.
               </Text>
             </View>
             <Feather
-              name="chevron-right"
-              size={20}
+              name="arrow-up-right"
+              size={18}
               color={c.primaryForeground}
             />
           </View>
@@ -102,9 +140,11 @@ function CustomerHome() {
       )}
 
       {!seasonOpen && (
-        <Card style={{ backgroundColor: c.secondary, borderColor: c.accent }}>
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            <Feather name="info" size={18} color={c.primary} />
+        <Card tone="soft" padding={14}>
+          <View
+            style={{ flexDirection: "row", gap: 10, alignItems: "center" }}
+          >
+            <Feather name="info" size={16} color={c.accentDeep} />
             <Text
               style={{
                 color: c.foreground,
@@ -113,19 +153,43 @@ function CustomerHome() {
                 flex: 1,
               }}
             >
-              Sezon kapalı. Yeni sezon {formatDateTR(season.start)}
-              {" "}
-              tarihinde başlıyor.
+              Sezon kapalı. Yeni sezon {formatDateTR(season.start)} tarihinde
+              başlıyor.
             </Text>
           </View>
         </Card>
       )}
 
+      {/* SECTION — Resorts */}
       <View style={{ gap: 4 }}>
-        <Text style={[styles.h2, { color: c.foreground }]}>
-          Bir kayak merkezi seç
-        </Text>
-        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+            Pistler
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 12,
+            }}
+          >
+            {data?.length ?? 0} merkez
+          </Text>
+        </View>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 13,
+            marginTop: 2,
+          }}
+        >
           Türkiye'nin en iyi 7 pisti, kapındaki gibi.
         </Text>
       </View>
@@ -140,40 +204,92 @@ function CustomerHome() {
         />
       ) : (
         <View style={{ gap: 12 }}>
-          {data.map((r) => (
-            <Card
+          {data.map((r, i) => (
+            <ResortCard
               key={r.id}
+              resort={r}
+              index={i}
               onPress={() => router.push(`/(app)/resort/${r.id}`)}
-            >
-              <View style={styles.row}>
-                <View
-                  style={[
-                    styles.iconBox,
-                    {
-                      backgroundColor: c.secondary,
-                      borderRadius: c.radius,
-                    },
-                  ]}
-                >
-                  <Feather name="triangle" size={22} color={c.primary} />
-                </View>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={[styles.cardTitle, { color: c.foreground }]}>
-                    {r.name}
-                  </Text>
-                  <Pill label={r.region} tone="accent" />
-                </View>
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={c.mutedForeground}
-                />
-              </View>
-            </Card>
+            />
           ))}
         </View>
       )}
     </Screen>
+  );
+}
+
+function ResortCard({
+  resort,
+  index,
+  onPress,
+}: {
+  resort: Resort;
+  index: number;
+  onPress: () => void;
+}) {
+  const c = useColors();
+  return (
+    <Card onPress={onPress} padding={18}>
+      <View
+        style={{ flexDirection: "row", alignItems: "center", gap: 14 }}
+      >
+        {/* Numbered editorial marker */}
+        <View
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 18,
+            backgroundColor: c.muted,
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+          }}
+        >
+          <Feather name="triangle" size={22} color={c.foreground} />
+          <Text
+            style={{
+              position: "absolute",
+              top: -6,
+              right: -6,
+              backgroundColor: c.accent,
+              color: c.accentForeground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 11,
+              width: 20,
+              height: 20,
+              borderRadius: 10,
+              textAlign: "center",
+              lineHeight: 20,
+            }}
+          >
+            {String(index + 1).padStart(2, "0")}
+          </Text>
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 19,
+              letterSpacing: -0.3,
+            }}
+          >
+            {resort.name}
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 12,
+              letterSpacing: 0.2,
+            }}
+          >
+            {resort.region}
+          </Text>
+        </View>
+        <Feather name="arrow-up-right" size={18} color={c.taupeSoft ?? c.mutedForeground} />
+      </View>
+    </Card>
   );
 }
 
@@ -201,22 +317,31 @@ function InstructorHome() {
   });
 
   return (
-    <Screen contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}>
-      <View>
-        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
-          Eğitmen Paneli
-        </Text>
-        <Text style={[styles.name, { color: c.foreground }]}>
-          {user?.name?.split(" ")[0] || "Eğitmen"}
-        </Text>
-      </View>
+    <Screen contentStyle={{ paddingTop: insets.top + 16, gap: 22 }}>
+      <Header
+        eyebrow="Eğitmen Paneli"
+        title={`İyi dersler,\n${user?.name?.split(" ")[0] || "Eğitmen"}.`}
+        subtitle="Takvimini ve profilini buradan yönet."
+      />
 
       <View style={{ flexDirection: "row", gap: 12 }}>
         <Card
           style={{ flex: 1 }}
+          padding={16}
           onPress={() => router.push("/(app)/instructor-panel/calendar")}
         >
-          <Feather name="calendar" size={22} color={c.primary} />
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="calendar" size={18} color={c.accentDeep} />
+          </View>
           <Text style={[styles.tileTitle, { color: c.foreground }]}>
             Takvimim
           </Text>
@@ -226,9 +351,21 @@ function InstructorHome() {
         </Card>
         <Card
           style={{ flex: 1 }}
+          padding={16}
           onPress={() => router.push("/(app)/instructor-panel/setup")}
         >
-          <Feather name="user-check" size={22} color={c.primary} />
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: c.muted,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="user" size={18} color={c.foreground} />
+          </View>
           <Text style={[styles.tileTitle, { color: c.foreground }]}>
             Profilim
           </Text>
@@ -238,7 +375,9 @@ function InstructorHome() {
         </Card>
       </View>
 
-      <Text style={[styles.h2, { color: c.foreground }]}>Yaklaşan dersler</Text>
+      <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+        Yaklaşan dersler
+      </Text>
       {!bookings || bookings.length === 0 ? (
         <EmptyState
           icon="calendar"
@@ -284,17 +423,14 @@ function AdminHome() {
   });
 
   return (
-    <Screen contentStyle={{ paddingTop: insets.top + 12, gap: 16 }}>
-      <View>
-        <Text style={[styles.greeting, { color: c.mutedForeground }]}>
-          Yönetici
-        </Text>
-        <Text style={[styles.name, { color: c.foreground }]}>
-          {user?.name?.split(" ")[0] || "Admin"}
-        </Text>
-      </View>
+    <Screen contentStyle={{ paddingTop: insets.top + 16, gap: 22 }}>
+      <Header
+        eyebrow="Yönetici"
+        title={user?.name?.split(" ")[0] || "Admin"}
+        subtitle="Platformun nabzı."
+      />
 
-      <View style={{ flexDirection: "row", gap: 12 }}>
+      <View style={{ flexDirection: "row", gap: 10 }}>
         <StatCard label="Kullanıcı" value={stats?.users ?? 0} icon="users" />
         <StatCard label="Rezervasyon" value={stats?.bookings ?? 0} icon="calendar" />
         <StatCard
@@ -308,15 +444,25 @@ function AdminHome() {
       <Card onPress={() => router.push("/(app)/admin")}>
         <View style={styles.row}>
           <View
-            style={[
-              styles.iconBox,
-              { backgroundColor: c.secondary, borderRadius: c.radius },
-            ]}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 16,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            <Feather name="shield" size={22} color={c.primary} />
+            <Feather name="shield" size={20} color={c.accentDeep} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, { color: c.foreground }]}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 17,
+              }}
+            >
               Yönetici Paneli
             </Text>
             <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
@@ -343,24 +489,32 @@ function StatCard({
 }) {
   const c = useColors();
   return (
-    <Card style={{ flex: 1, padding: 12 }}>
+    <Card style={{ flex: 1 }} padding={14}>
       <Feather
         name={icon}
-        size={18}
-        color={tone === "warning" ? c.warning : c.primary}
+        size={16}
+        color={tone === "warning" ? c.warning : c.accent}
       />
       <Text
         style={{
           color: c.foreground,
-          fontFamily: "Inter_700Bold",
-          fontSize: 22,
-          marginTop: 6,
+          fontFamily: "Fraunces_700Bold",
+          fontSize: 26,
+          letterSpacing: -0.5,
+          marginTop: 8,
         }}
       >
         {value}
       </Text>
       <Text
-        style={{ color: c.mutedForeground, fontSize: 11, marginTop: 2 }}
+        style={{
+          color: c.mutedForeground,
+          fontFamily: "Inter_500Medium",
+          fontSize: 11,
+          letterSpacing: 0.4,
+          textTransform: "uppercase",
+          marginTop: 2,
+        }}
       >
         {label}
       </Text>
@@ -369,20 +523,38 @@ function StatCard({
 }
 
 const styles = StyleSheet.create({
-  greeting: { fontFamily: "Inter_400Regular", fontSize: 14 },
-  name: { fontFamily: "Inter_700Bold", fontSize: 26, letterSpacing: -0.5 },
-  h2: { fontFamily: "Inter_600SemiBold", fontSize: 17 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  iconBox: {
-    width: 44,
-    height: 44,
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  brandMark: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardTitle: { fontFamily: "Inter_600SemiBold", fontSize: 16 },
+  brandWord: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    letterSpacing: -0.2,
+  },
+  seasonDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  sectionTitle: {
+    fontFamily: "Fraunces_600SemiBold",
+    fontSize: 22,
+    letterSpacing: -0.4,
+  },
+  row: { flexDirection: "row", alignItems: "center", gap: 14 },
   tileTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    marginTop: 8,
+    marginTop: 12,
   },
 });

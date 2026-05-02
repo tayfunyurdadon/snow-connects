@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
@@ -51,24 +52,22 @@ export default function ResortInstructors() {
     enabled: !!id,
   });
 
-  // Morning / Afternoon / Full day chips are an intent filter only at this
-  // step. Date-based availability filtering happens after the user picks
-  // an instructor (on the dates screen and the booking grid).
   const visible = data ?? [];
 
   return (
     <>
-      <Stack.Screen options={{ title: resort?.name ?? "Eğitmenler" }} />
-      <Screen contentStyle={{ gap: 14 }}>
+      <Stack.Screen options={{ title: "" }} />
+      <Screen contentStyle={{ gap: 20 }}>
         {resort ? (
-          <View style={{ gap: 4 }}>
-            <Text style={[styles.h1, { color: c.foreground }]}>
-              {resort.name}
-            </Text>
-            <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
-              {resort.region}
-            </Text>
-          </View>
+          <Header
+            eyebrow={resort.region}
+            title={resort.name}
+            subtitle={
+              visible.length > 0
+                ? `Bu pistte ders veren ${visible.length} eğitmen.`
+                : "Eğitmen listesi hazırlanıyor."
+            }
+          />
         ) : null}
 
         {isLoading ? (
@@ -80,13 +79,15 @@ export default function ResortInstructors() {
             description="Yakın zamanda eğitmenler eklendiğinde burada görünecek."
           />
         ) : (
-          visible.map((p) => (
-            <InstructorCard
-              key={p.user_id}
-              row={p}
-              onPress={() => router.push(`/(app)/instructor/${p.user_id}`)}
-            />
-          ))
+          <View style={{ gap: 12 }}>
+            {visible.map((p) => (
+              <InstructorCard
+                key={p.user_id}
+                row={p}
+                onPress={() => router.push(`/(app)/instructor/${p.user_id}`)}
+              />
+            ))}
+          </View>
         )}
       </Screen>
     </>
@@ -105,43 +106,31 @@ function InstructorCard({
   const customerPrice = Math.round(row.base_price * 1.2);
   const rating = row.rating ?? 5;
   return (
-    <Card onPress={onPress}>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {row.photo ? (
-          <View
-            style={[
-              styles.photo,
-              { backgroundColor: c.secondary, borderRadius: 12 },
-            ]}
+    <Card onPress={onPress} padding={18}>
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        <View
+          style={[
+            styles.photo,
+            {
+              backgroundColor: c.primary,
+              alignItems: "center",
+              justifyContent: "center",
+            },
+          ]}
+        >
+          <Text
+            style={{
+              color: c.primaryForeground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 28,
+              letterSpacing: -1,
+            }}
           >
-            <Text style={{ display: "none" }}>{row.photo}</Text>
-            <Feather name="user" size={28} color={c.primary} />
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.photo,
-              {
-                backgroundColor: c.primary,
-                borderRadius: 12,
-                alignItems: "center",
-                justifyContent: "center",
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: c.primaryForeground,
-                fontFamily: "Inter_700Bold",
-                fontSize: 24,
-              }}
-            >
-              {initial}
-            </Text>
-          </View>
-        )}
+            {initial}
+          </Text>
+        </View>
 
-        <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flex: 1, gap: 6 }}>
           <View
             style={{
               flexDirection: "row",
@@ -153,8 +142,9 @@ function InstructorCard({
             <Text
               style={{
                 color: c.foreground,
-                fontFamily: "Inter_700Bold",
-                fontSize: 16,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 18,
+                letterSpacing: -0.3,
                 flex: 1,
               }}
               numberOfLines={1}
@@ -165,21 +155,37 @@ function InstructorCard({
               <Text
                 style={{
                   color: c.foreground,
-                  fontFamily: "Inter_700Bold",
-                  fontSize: 15,
+                  fontFamily: "Fraunces_700Bold",
+                  fontSize: 17,
+                  letterSpacing: -0.3,
                 }}
               >
                 {formatTRY(customerPrice)}
               </Text>
-              <Text style={{ color: c.mutedForeground, fontSize: 10 }}>
-                saatlik · KDV dahil
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 10,
+                  letterSpacing: 0.3,
+                  textTransform: "uppercase",
+                }}
+              >
+                Saatlik · KDV dahil
               </Text>
             </View>
           </View>
 
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <View style={styles.metaRow}>
-              <Feather name="star" size={12} color={c.warning} />
+              <Feather name="star" size={12} color={c.accent} />
               <Text
                 style={{
                   color: c.foreground,
@@ -190,11 +196,17 @@ function InstructorCard({
                 {rating.toFixed(1)}
               </Text>
             </View>
-            <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 12,
+              }}
+            >
               {row.experience_years} yıl deneyim
             </Text>
             {row.certifications && row.certifications.length > 0 ? (
-              <Pill label={row.certifications[0]} tone="accent" />
+              <Pill label={row.certifications[0]} tone="accent" size="sm" />
             ) : null}
           </View>
 
@@ -202,8 +214,9 @@ function InstructorCard({
             <Text
               style={{
                 color: c.mutedForeground,
-                fontSize: 12,
-                lineHeight: 17,
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                lineHeight: 19,
                 marginTop: 2,
               }}
               numberOfLines={2}
@@ -218,10 +231,10 @@ function InstructorCard({
 }
 
 const styles = StyleSheet.create({
-  h1: { fontFamily: "Inter_700Bold", fontSize: 22 },
   photo: {
     width: 64,
     height: 64,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },

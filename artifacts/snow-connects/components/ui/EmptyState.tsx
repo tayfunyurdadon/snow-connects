@@ -14,7 +14,19 @@ export function EmptyState({ icon = "inbox", title, description }: Props) {
   const c = useColors();
   return (
     <View style={styles.wrap}>
-      <Feather name={icon} size={42} color={c.mutedForeground} />
+      <View
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: c.muted,
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 4,
+        }}
+      >
+        <Feather name={icon} size={28} color={c.mutedForeground} />
+      </View>
       <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
       {description ? (
         <Text style={[styles.desc, { color: c.mutedForeground }]}>
@@ -29,19 +41,21 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
+    paddingVertical: 56,
     gap: 8,
   },
   title: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 17,
+    fontFamily: "Fraunces_600SemiBold",
+    fontSize: 19,
     textAlign: "center",
+    letterSpacing: -0.3,
   },
   desc: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     textAlign: "center",
-    paddingHorizontal: 24,
-    lineHeight: 20,
+    paddingHorizontal: 32,
+    lineHeight: 21,
+    marginTop: 2,
   },
 });

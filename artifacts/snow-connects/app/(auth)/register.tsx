@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
+import { Header } from "@/components/ui/Header";
 import { Input } from "@/components/ui/Input";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,9 +32,6 @@ export default function RegisterScreen() {
       return;
     }
     setLoading(true);
-    // Pass the chosen role through user metadata. The handle_new_user()
-    // trigger reads it and writes it onto the public.users row, so the
-    // role is correct from the moment the profile is created.
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -44,10 +42,6 @@ export default function RegisterScreen() {
       Alert.alert("Kayıt başarısız", error.message);
       return;
     }
-
-    // Belt-and-suspenders: if an older trigger is installed (without the
-    // role-from-metadata patch), this update fixes the role for the
-    // currently signed-in user via the users_self_update RLS policy.
     const userId = data.user?.id;
     if (userId && data.session) {
       await supabase
@@ -55,9 +49,7 @@ export default function RegisterScreen() {
         .update({ name: name.trim(), role })
         .eq("id", userId);
     }
-
     if (!data.session) {
-      // Email confirmation enabled — there is no session yet.
       setLoading(false);
       Alert.alert(
         "E-postanı doğrula",
@@ -66,30 +58,36 @@ export default function RegisterScreen() {
       );
       return;
     }
-
     const profile = await refreshUser();
     setLoading(false);
     router.replace(resolveTarget(next, profile?.role ?? role) as never);
   }
 
   return (
-    <Screen hasHeader={false} contentStyle={{ gap: 18, paddingTop: 64 }}>
+    <Screen hasHeader={false} contentStyle={{ gap: 20, paddingTop: 72 }}>
       <Pressable
         onPress={() => router.replace("/(app)/(tabs)")}
         style={styles.cancel}
       >
-        <Feather name="x" size={20} color={c.mutedForeground} />
-        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_500Medium" }}>
-          Misafir olarak gez
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_500Medium",
+            fontSize: 13,
+          }}
+        >
+          Misafir gez
         </Text>
+        <Feather name="arrow-right" size={14} color={c.mutedForeground} />
       </Pressable>
 
-      <Text style={[styles.title, { color: c.foreground }]}>Kayıt Ol</Text>
-      <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-        Ücretsiz hesap oluştur, dakikalar içinde dersini ayarla
-      </Text>
+      <Header
+        eyebrow="Yeni Hesap"
+        title={`Aramıza\nhoş geldin.`}
+        subtitle="Birkaç saniye, ve dersini ayarlamaya hazırsın."
+      />
 
-      <View style={{ gap: 12, marginTop: 8 }}>
+      <View style={{ gap: 12, marginTop: 4 }}>
         <Input
           label="Ad Soyad"
           value={name}
@@ -115,10 +113,12 @@ export default function RegisterScreen() {
 
         <Text
           style={{
-            color: c.foreground,
+            color: c.mutedForeground,
             fontFamily: "Inter_500Medium",
-            fontSize: 13,
-            marginTop: 4,
+            fontSize: 11,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+            marginTop: 6,
           }}
         >
           Hesap türü
@@ -133,17 +133,24 @@ export default function RegisterScreen() {
                 style={{
                   flex: 1,
                   borderRadius: c.radius,
-                  borderWidth: 1,
-                  borderColor: active ? c.primary : c.border,
-                  backgroundColor: active ? c.secondary : c.card,
-                  paddingVertical: 14,
+                  borderWidth: 1.5,
+                  borderColor: active ? c.accent : c.borderSoft,
+                  backgroundColor: active ? c.accentSoft : c.card,
+                  paddingVertical: 16,
                   alignItems: "center",
+                  gap: 6,
                 }}
               >
+                <Feather
+                  name={r === "customer" ? "user" : "award"}
+                  size={20}
+                  color={active ? c.accentDeep : c.mutedForeground}
+                />
                 <Text
                   style={{
-                    color: active ? c.primary : c.foreground,
+                    color: active ? c.accentDeep : c.foreground,
                     fontFamily: "Inter_600SemiBold",
+                    fontSize: 14,
                   }}
                 >
                   {r === "customer" ? "Öğrenci" : "Eğitmen"}
@@ -153,12 +160,24 @@ export default function RegisterScreen() {
           })}
         </View>
 
-        <Button label="Hesap Oluştur" loading={loading} onPress={onSubmit} />
+        <View style={{ marginTop: 6 }}>
+          <Button
+            variant="accent"
+            size="lg"
+            label="Hesap Oluştur"
+            loading={loading}
+            onPress={onSubmit}
+          />
+        </View>
       </View>
 
       <View style={styles.footer}>
         <Text
-          style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 13,
+          }}
         >
           Zaten hesabın var mı?{" "}
         </Text>
@@ -170,7 +189,13 @@ export default function RegisterScreen() {
           }
           replace
         >
-          <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>
+          <Text
+            style={{
+              color: c.accentDeep,
+              fontFamily: "Inter_700Bold",
+              fontSize: 13,
+            }}
+          >
             Giriş yap
           </Text>
         </Link>
@@ -180,8 +205,6 @@ export default function RegisterScreen() {
 }
 
 function resolveTarget(next: string | undefined, role: UserRole): string {
-  // Instructors always go to their panel after signup, even if they came
-  // from a "Rezervasyon Yap" deep-link — booking is a customer action.
   if (role === "instructor") return "/(app)/instructor-panel/setup";
   if (next) return next;
   return "/(app)/(tabs)";
@@ -195,11 +218,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    padding: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     zIndex: 10,
   },
-  title: { fontFamily: "Inter_700Bold", fontSize: 26, letterSpacing: -0.5 },
-  subtitle: { fontFamily: "Inter_400Regular", fontSize: 14 },
   footer: {
     flexDirection: "row",
     justifyContent: "center",

@@ -89,14 +89,38 @@ export default function InstructorCalendar() {
       .reduce((s, p) => s + p.net_amount, 0) || 0;
 
   return (
-    <Screen contentStyle={{ gap: 14 }}>
-      <Card>
+    <Screen contentStyle={{ gap: 18 }}>
+      <Card padding={14}>
         <MonthCalendar value={date} onChange={setDate} seasonGate />
       </Card>
 
-      <Text style={[styles.h, { color: c.foreground }]}>
-        {formatDateTR(date)}
-      </Text>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text
+          style={{
+            color: c.foreground,
+            fontFamily: "Fraunces_600SemiBold",
+            fontSize: 20,
+            letterSpacing: -0.4,
+          }}
+        >
+          {formatDateTR(date)}
+        </Text>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_500Medium",
+            fontSize: 12,
+          }}
+        >
+          {TIME_SLOTS.length} saat
+        </Text>
+      </View>
 
       {isLoading ? (
         <Loading inline />
@@ -105,51 +129,60 @@ export default function InstructorCalendar() {
           {TIME_SLOTS.map((s) => {
             const ts = slotMap.get(s.id);
             const status = ts?.status ?? "available";
+            const dotColor =
+              status === "booked"
+                ? c.accent
+                : status === "manual"
+                  ? c.taupeSoft ?? c.mutedForeground
+                  : c.success;
             return (
               <Pressable
                 key={s.id}
                 onPress={() => toggleBlock(s.id)}
                 disabled={status === "booked"}
-                style={{
+                style={({ pressed }) => ({
                   paddingHorizontal: 16,
                   paddingVertical: 14,
                   borderRadius: c.radius,
                   borderWidth: 1,
                   borderColor:
                     status === "booked"
-                      ? c.primary
+                      ? c.accent
                       : status === "manual"
-                        ? c.border
-                        : c.success,
+                        ? c.borderSoft
+                        : c.borderSoft,
                   backgroundColor:
                     status === "booked"
-                      ? c.secondary
+                      ? c.accentSoft
                       : status === "manual"
                         ? c.muted
                         : c.card,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "space-between",
-                }}
+                  opacity: pressed ? 0.9 : 1,
+                })}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
                   <View
                     style={{
                       width: 8,
                       height: 8,
-                      borderRadius: 8,
-                      backgroundColor:
-                        status === "booked"
-                          ? c.primary
-                          : status === "manual"
-                            ? c.slateMuted
-                            : c.success,
+                      borderRadius: 4,
+                      backgroundColor: dotColor,
                     }}
                   />
                   <Text
                     style={{
                       color: c.foreground,
                       fontFamily: "Inter_600SemiBold",
+                      fontSize: 15,
                     }}
                   >
                     {s.label}
@@ -163,6 +196,7 @@ export default function InstructorCalendar() {
                         ? "Kapalı"
                         : "Açık"
                   }
+                  size="sm"
                   tone={
                     status === "booked"
                       ? "accent"
@@ -177,39 +211,68 @@ export default function InstructorCalendar() {
         </View>
       )}
 
-      <Text style={[styles.h, { color: c.foreground, marginTop: 12 }]}>
+      <Text
+        style={{
+          color: c.foreground,
+          fontFamily: "Fraunces_600SemiBold",
+          fontSize: 20,
+          letterSpacing: -0.4,
+          marginTop: 6,
+        }}
+      >
         Ödemelerim
       </Text>
+
       <View style={{ flexDirection: "row", gap: 10 }}>
-        <Card style={{ flex: 1 }}>
+        <Card style={{ flex: 1 }} padding={14}>
           <Feather name="clock" size={16} color={c.warning} />
           <Text
             style={{
               color: c.foreground,
-              fontFamily: "Inter_700Bold",
-              fontSize: 18,
-              marginTop: 6,
+              fontFamily: "Fraunces_700Bold",
+              fontSize: 22,
+              letterSpacing: -0.4,
+              marginTop: 8,
             }}
           >
             {formatTRY(totalPending)}
           </Text>
-          <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 11,
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+              marginTop: 2,
+            }}
+          >
             Bekleyen
           </Text>
         </Card>
-        <Card style={{ flex: 1 }}>
+        <Card style={{ flex: 1 }} padding={14}>
           <Feather name="check-circle" size={16} color={c.success} />
           <Text
             style={{
               color: c.foreground,
-              fontFamily: "Inter_700Bold",
-              fontSize: 18,
-              marginTop: 6,
+              fontFamily: "Fraunces_700Bold",
+              fontSize: 22,
+              letterSpacing: -0.4,
+              marginTop: 8,
             }}
           >
             {formatTRY(totalReleased)}
           </Text>
-          <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 11,
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+              marginTop: 2,
+            }}
+          >
             Aktarılan
           </Text>
         </Card>
@@ -224,21 +287,30 @@ export default function InstructorCalendar() {
               alignItems: "center",
             }}
           >
-            <View>
+            <View style={{ flex: 1 }}>
               <Text
                 style={{
                   color: c.foreground,
-                  fontFamily: "Inter_600SemiBold",
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 15,
                 }}
               >
                 {formatTRY(p.net_amount)}
               </Text>
-              <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
                 Ders {formatDateTR(p.lesson_date)} · Ödeme{" "}
                 {formatDateTR(p.release_date)}
               </Text>
             </View>
             <Pill
+              size="sm"
               label={p.status === "pending" ? "Bekliyor" : "Aktarıldı"}
               tone={p.status === "pending" ? "warning" : "success"}
             />
@@ -249,6 +321,4 @@ export default function InstructorCalendar() {
   );
 }
 
-const styles = StyleSheet.create({
-  h: { fontFamily: "Inter_700Bold", fontSize: 18 },
-});
+const styles = StyleSheet.create({});

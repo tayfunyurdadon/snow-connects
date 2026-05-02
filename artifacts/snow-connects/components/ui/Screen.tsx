@@ -37,10 +37,10 @@ export function Screen({
   const topPad = !hasHeader ? insets.top : 0;
 
   const content: ViewStyle = {
-    paddingHorizontal: padded ? 18 : 0,
-    paddingBottom: padded ? 24 + bottomPad : bottomPad,
+    paddingHorizontal: padded ? 20 : 0,
+    paddingBottom: padded ? 36 + bottomPad : bottomPad,
     paddingTop: topPad,
-    gap: padded ? 14 : 0,
+    gap: padded ? 16 : 0,
     ...(contentStyle ?? {}),
   };
 
@@ -50,9 +50,14 @@ export function Screen({
         style={[styles.fill, { backgroundColor: c.background }]}
         contentContainerStyle={content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         refreshControl={
           onRefresh ? (
-            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={!!refreshing}
+              onRefresh={onRefresh}
+              tintColor={c.accent}
+            />
           ) : undefined
         }
       >

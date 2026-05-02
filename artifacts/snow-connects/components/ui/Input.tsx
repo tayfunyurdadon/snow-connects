@@ -22,26 +22,28 @@ export function Input({ label, helperText, error, style, ...rest }: Props) {
       {label ? (
         <Text
           style={{
-            color: c.foreground,
+            color: c.mutedForeground,
             fontFamily: "Inter_500Medium",
-            fontSize: 13,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
           }}
         >
           {label}
         </Text>
       ) : null}
       <TextInput
-        placeholderTextColor={c.mutedForeground}
+        placeholderTextColor={c.taupeSoft ?? c.mutedForeground}
         style={[
           {
             backgroundColor: c.card,
             color: c.foreground,
             borderRadius: c.radius,
             borderWidth: 1,
-            borderColor: error ? c.destructive : c.border,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            fontFamily: "Inter_400Regular",
+            borderColor: error ? c.destructive : c.borderSoft,
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+            fontFamily: "Inter_500Medium",
             fontSize: 16,
           },
           style,

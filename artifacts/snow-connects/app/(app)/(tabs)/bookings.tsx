@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
@@ -65,18 +66,16 @@ export default function BookingsTab() {
 
   return (
     <Screen
-      contentStyle={{ paddingTop: insets.top + 12, gap: 14 }}
+      contentStyle={{ paddingTop: insets.top + 16, gap: 18 }}
       refreshing={isRefetching}
       onRefresh={refetch}
     >
-      <Text style={[styles.title, { color: c.foreground }]}>
-        Rezervasyonlarım
-      </Text>
+      <Header eyebrow="Derslerim" title="Rezervasyonlar" />
 
       <View
         style={[
           styles.tabRow,
-          { backgroundColor: c.secondary, borderRadius: c.radius },
+          { backgroundColor: c.muted, borderRadius: 999 },
         ]}
       >
         {(["upcoming", "past"] as const).map((t) => {
@@ -89,13 +88,13 @@ export default function BookingsTab() {
                 styles.tabBtn,
                 {
                   backgroundColor: active ? c.card : "transparent",
-                  borderRadius: c.radius - 4,
+                  borderRadius: 999,
                 },
               ]}
             >
               <Text
                 style={{
-                  color: active ? c.primary : c.mutedForeground,
+                  color: active ? c.foreground : c.mutedForeground,
                   fontFamily: "Inter_600SemiBold",
                   fontSize: 13,
                 }}
@@ -120,62 +119,88 @@ export default function BookingsTab() {
           }
         />
       ) : (
-        filtered.map((b) => (
-          <Card
-            key={b.id}
-            onPress={() => {
-              if (b.payment_status === "pending" && user.role === "customer") {
-                router.push(`/(app)/payment/${b.id}`);
-              }
-            }}
-          >
-            <View style={{ gap: 8 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <Text
+        <View style={{ gap: 12 }}>
+          {filtered.map((b) => (
+            <Card
+              key={b.id}
+              onPress={() => {
+                if (b.payment_status === "pending" && user.role === "customer") {
+                  router.push(`/(app)/payment/${b.id}`);
+                }
+              }}
+              padding={18}
+            >
+              <View style={{ gap: 12 }}>
+                <View
                   style={{
-                    color: c.foreground,
-                    fontFamily: "Inter_600SemiBold",
-                    fontSize: 15,
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 10,
                   }}
                 >
-                  {b.resort?.name ?? "Pist"}
-                </Text>
-                <PaymentPill status={b.payment_status} />
-              </View>
-              <View style={{ flexDirection: "row", gap: 14 }}>
-                <Row icon="calendar" text={formatDateTR(b.lesson_date)} />
-                <Row icon="users" text={`${b.student_count} öğrenci`} />
-              </View>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: 4,
-                }}
-              >
-                <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-                  {b.slot_ids.length} ders saati
-                </Text>
-                <Text
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontFamily: "Inter_600SemiBold",
+                        fontSize: 11,
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {b.resort?.region ?? ""}
+                    </Text>
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Fraunces_600SemiBold",
+                        fontSize: 19,
+                        letterSpacing: -0.3,
+                      }}
+                    >
+                      {b.resort?.name ?? "Pist"}
+                    </Text>
+                  </View>
+                  <PaymentPill status={b.payment_status} />
+                </View>
+
+                <View
                   style={{
-                    color: c.foreground,
-                    fontFamily: "Inter_700Bold",
-                    fontSize: 16,
+                    height: 1,
+                    backgroundColor: c.borderSoft,
+                  }}
+                />
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
                   }}
                 >
-                  {formatTRY(b.total_price)}
-                </Text>
+                  <View style={{ flexDirection: "row", gap: 14 }}>
+                    <Row icon="calendar" text={formatDateTR(b.lesson_date)} />
+                    <Row
+                      icon="users"
+                      text={`${b.student_count} öğr · ${b.slot_ids.length} ders`}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      color: c.foreground,
+                      fontFamily: "Fraunces_700Bold",
+                      fontSize: 17,
+                      letterSpacing: -0.3,
+                    }}
+                  >
+                    {formatTRY(b.total_price)}
+                  </Text>
+                </View>
               </View>
-            </View>
-          </Card>
-        ))
+            </Card>
+          ))}
+        </View>
       )}
     </Screen>
   );
@@ -190,13 +215,13 @@ function Row({
 }) {
   const c = useColors();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Feather name={icon} size={13} color={c.mutedForeground} />
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+      <Feather name={icon} size={12} color={c.mutedForeground} />
       <Text
         style={{
           color: c.mutedForeground,
-          fontFamily: "Inter_400Regular",
-          fontSize: 13,
+          fontFamily: "Inter_500Medium",
+          fontSize: 12,
         }}
       >
         {text}
@@ -208,18 +233,17 @@ function Row({
 function PaymentPill({ status }: { status: Booking["payment_status"] }) {
   switch (status) {
     case "paid":
-      return <Pill label="Ödendi" tone="success" />;
+      return <Pill label="Ödendi" tone="success" size="sm" />;
     case "pending":
-      return <Pill label="Ödeme bekliyor" tone="warning" />;
+      return <Pill label="Ödeme bekliyor" tone="warning" size="sm" />;
     case "failed":
-      return <Pill label="Başarısız" tone="danger" />;
+      return <Pill label="Başarısız" tone="danger" size="sm" />;
     default:
-      return <Pill label="İade" />;
+      return <Pill label="İade" size="sm" />;
   }
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: "Inter_700Bold", fontSize: 24 },
   tabRow: { flexDirection: "row", padding: 4 },
   tabBtn: {
     flex: 1,

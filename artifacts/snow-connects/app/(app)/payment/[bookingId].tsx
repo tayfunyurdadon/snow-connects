@@ -7,6 +7,7 @@ import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
@@ -47,10 +48,6 @@ export default function PaymentScreen() {
 
   async function pay() {
     setPaying(true);
-    // TODO: Replace with Param.com payment gateway integration.
-    // For now we simulate a successful charge and call the server-side
-    // confirm_payment RPC which marks the booking paid and creates the
-    // payout record (release date = lesson_date + 21 business days).
     await new Promise((r) => setTimeout(r, 900));
     const { error } = await supabase.rpc("confirm_payment", {
       p_booking: bookingId,
@@ -79,79 +76,140 @@ export default function PaymentScreen() {
 
   if (booking.payment_status === "paid") {
     return (
-      <Screen contentStyle={{ gap: 14, alignItems: "center", paddingTop: 40 }}>
-        <View
-          style={[
-            styles.successCircle,
-            { backgroundColor: c.success, borderRadius: 100 },
-          ]}
-        >
-          <Feather name="check" size={36} color="#ffffff" />
+      <Screen contentStyle={{ gap: 18, alignItems: "center", paddingTop: 56 }}>
+        <View style={[styles.successCircle, { backgroundColor: c.success }]}>
+          <Feather name="check" size={40} color="#ffffff" />
         </View>
-        <Text style={[styles.title, { color: c.foreground }]}>
-          Ödeme tamamlandı
-        </Text>
-        <Text
-          style={{
-            color: c.mutedForeground,
-            textAlign: "center",
-            paddingHorizontal: 12,
-          }}
-        >
-          {formatDateTR(booking.lesson_date)} tarihli rezervasyonunuz onaylandı.
-        </Text>
-        <Button
-          label="Rezervasyonlarıma Git"
-          onPress={() => router.replace("/(app)/(tabs)/bookings")}
-        />
+        <View style={{ alignItems: "center", gap: 8 }}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 28,
+              letterSpacing: -0.6,
+              textAlign: "center",
+            }}
+          >
+            Ödeme tamamlandı
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 14,
+              lineHeight: 21,
+              textAlign: "center",
+              paddingHorizontal: 12,
+            }}
+          >
+            {formatDateTR(booking.lesson_date)} tarihli rezervasyonun
+            onaylandı. Görüşürüz!
+          </Text>
+        </View>
+        <View style={{ width: "100%", marginTop: 12 }}>
+          <Button
+            variant="accent"
+            label="Rezervasyonlarıma Git"
+            onPress={() => router.replace("/(app)/(tabs)/bookings")}
+          />
+        </View>
       </Screen>
     );
   }
 
   return (
-    <Screen contentStyle={{ gap: 14 }}>
-      <Pill label="Test ortamı · Param.com entegrasyonu yakında" tone="warning" />
+    <Screen contentStyle={{ gap: 18 }}>
+      <Header
+        eyebrow="Son Adım"
+        title="Ödeme"
+        subtitle="Param.com entegrasyonu yakında. Şimdilik ödeme simüle edilir."
+      />
 
-      <Card>
-        <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+      <Card tone="ink" padding={22}>
+        <Text
+          style={{
+            color: c.primaryForeground,
+            opacity: 0.65,
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 11,
+            letterSpacing: 0.6,
+            textTransform: "uppercase",
+          }}
+        >
           Ödenecek tutar
         </Text>
         <Text
           style={{
-            color: c.foreground,
-            fontFamily: "Inter_700Bold",
-            fontSize: 32,
-            marginTop: 4,
+            color: c.primaryForeground,
+            fontFamily: "Fraunces_700Bold",
+            fontSize: 44,
+            letterSpacing: -1,
+            marginTop: 8,
           }}
         >
           {formatTRY(booking.total_price)}
         </Text>
-        <Text style={{ color: c.mutedForeground, fontSize: 12, marginTop: 4 }}>
-          {formatTRY(booking.base_amount)} ders + {formatTRY(booking.vat_amount)}{" "}
-          KDV
-        </Text>
+        <View
+          style={{
+            height: 1,
+            backgroundColor: c.primaryForeground,
+            opacity: 0.15,
+            marginVertical: 14,
+          }}
+        />
+        <View style={{ gap: 6 }}>
+          <BreakdownRow
+            label="Ders ücreti"
+            value={formatTRY(booking.base_amount)}
+          />
+          <BreakdownRow
+            label="KDV (%20)"
+            value={formatTRY(booking.vat_amount)}
+          />
+        </View>
       </Card>
 
-      <Card>
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          <Feather name="credit-card" size={22} color={c.primary} />
+      <Card padding={16}>
+        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+          <View
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="credit-card" size={20} color={c.accentDeep} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text
               style={{
                 color: c.foreground,
                 fontFamily: "Inter_600SemiBold",
+                fontSize: 15,
               }}
             >
               Kart ile Öde
             </Text>
-            <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-              Demo: butona basıldığında ödeme simüle edilir
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 12,
+              }}
+            >
+              Demo ortamı · ödeme simüle edilir
             </Text>
           </View>
+          <Pill label="Test" tone="warning" size="sm" />
         </View>
       </Card>
 
       <Button
+        variant="accent"
+        size="lg"
         label={`${formatTRY(booking.total_price)} öde`}
         onPress={pay}
         loading={paying}
@@ -160,24 +218,55 @@ export default function PaymentScreen() {
       <Text
         style={{
           color: c.mutedForeground,
-          fontSize: 11,
+          fontFamily: "Inter_400Regular",
+          fontSize: 12,
           textAlign: "center",
-          paddingHorizontal: 12,
+          paddingHorizontal: 20,
+          lineHeight: 18,
         }}
       >
-        Ödeme onaylandığında eğitmen takvimindeki saatler otomatik olarak kilitlenir.
+        Ödeme onaylandığında eğitmen takvimindeki saatler otomatik kilitlenir.
       </Text>
     </Screen>
   );
 }
 
+function BreakdownRow({ label, value }: { label: string; value: string }) {
+  const c = useColors();
+  return (
+    <View
+      style={{ flexDirection: "row", justifyContent: "space-between" }}
+    >
+      <Text
+        style={{
+          color: c.primaryForeground,
+          opacity: 0.7,
+          fontFamily: "Inter_400Regular",
+          fontSize: 13,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          color: c.primaryForeground,
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 13,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   successCircle: {
-    width: 84,
-    height: 84,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 24,
   },
-  title: { fontFamily: "Inter_700Bold", fontSize: 22 },
 });

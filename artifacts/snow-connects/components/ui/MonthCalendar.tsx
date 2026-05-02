@@ -102,7 +102,7 @@ export function MonthCalendar({
               style={[
                 styles.cell,
                 {
-                  backgroundColor: selected ? c.primary : "transparent",
+                  backgroundColor: selected ? c.accent : "transparent",
                   borderRadius: c.radius,
                 },
               ]}
@@ -110,7 +110,7 @@ export function MonthCalendar({
               <Text
                 style={{
                   color: selected
-                    ? c.primaryForeground
+                    ? c.accentForeground
                     : !allowed
                       ? c.slateMuted
                       : c.foreground,

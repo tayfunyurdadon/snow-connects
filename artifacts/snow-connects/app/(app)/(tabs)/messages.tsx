@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Screen } from "@/components/ui/Screen";
 import { SignInGate } from "@/components/ui/SignInGate";
@@ -86,11 +87,11 @@ export default function MessagesTab() {
 
   return (
     <Screen
-      contentStyle={{ paddingTop: insets.top + 12, gap: 14 }}
+      contentStyle={{ paddingTop: insets.top + 16, gap: 18 }}
       refreshing={isRefetching}
       onRefresh={refetch}
     >
-      <Text style={[styles.title, { color: c.foreground }]}>Mesajlar</Text>
+      <Header eyebrow="İletişim" title="Mesajlar" />
 
       {isLoading ? (
         <Loading inline />
@@ -101,60 +102,76 @@ export default function MessagesTab() {
           description="Bir eğitmenle ders ayarladığında mesajlaşma burada başlar."
         />
       ) : (
-        data.map((row) => (
-          <Card
-            key={row.partnerId}
-            onPress={() => router.push(`/(app)/messages/${row.partnerId}`)}
-          >
-            <View style={styles.row}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: c.secondary, borderRadius: 100 },
-                ]}
+        <View style={{ gap: 10 }}>
+          {data.map((row) => {
+            const initial = (row.partnerName || "?").slice(0, 1).toUpperCase();
+            return (
+              <Card
+                key={row.partnerId}
+                padding={16}
+                onPress={() => router.push(`/(app)/messages/${row.partnerId}`)}
               >
-                <Feather name="user" size={20} color={c.primary} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text
-                  style={{
-                    color: c.foreground,
-                    fontFamily: "Inter_600SemiBold",
-                  }}
-                >
-                  {row.partnerName}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: c.mutedForeground,
-                    fontFamily: "Inter_400Regular",
-                    fontSize: 13,
-                  }}
-                >
-                  {row.flagged ? "[Bildirildi] " : ""}
-                  {row.lastMessage}
-                </Text>
-              </View>
-              <Feather
-                name="chevron-right"
-                size={18}
-                color={c.mutedForeground}
-              />
-            </View>
-          </Card>
-        ))
+                <View style={styles.row}>
+                  <View
+                    style={[
+                      styles.avatar,
+                      { backgroundColor: c.muted },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Fraunces_600SemiBold",
+                        fontSize: 18,
+                        letterSpacing: -0.5,
+                      }}
+                    >
+                      {initial}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Inter_600SemiBold",
+                        fontSize: 15,
+                      }}
+                    >
+                      {row.partnerName}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: row.flagged ? c.destructive : c.mutedForeground,
+                        fontFamily: "Inter_400Regular",
+                        fontSize: 13,
+                      }}
+                    >
+                      {row.flagged ? "⚠ İnceleme · " : ""}
+                      {row.lastMessage}
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={c.taupeSoft ?? c.mutedForeground}
+                  />
+                </View>
+              </Card>
+            );
+          })}
+        </View>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: "Inter_700Bold", fontSize: 24 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  row: { flexDirection: "row", alignItems: "center", gap: 14 },
   avatar: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },

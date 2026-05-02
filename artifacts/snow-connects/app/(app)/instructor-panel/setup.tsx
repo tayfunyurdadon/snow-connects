@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Header } from "@/components/ui/Header";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { Screen } from "@/components/ui/Screen";
@@ -105,8 +106,6 @@ export default function InstructorSetup() {
     });
 
     try {
-      // Verify the session is still valid before writing — RLS upserts
-      // silently fail with cryptic messages when auth.uid() is null.
       const sessionResp = await supabase.auth.getSession();
       console.log("[instructor-setup] session check", {
         hasSession: !!sessionResp.data.session,
@@ -122,13 +121,6 @@ export default function InstructorSetup() {
         return;
       }
 
-      // Self-heal a missing public.users row before the upsert. The most
-      // common cause of a stuck save is a FK violation against users.id
-      // because the handle_new_user trigger never ran (older accounts).
-      // ensure_my_user is a SECURITY DEFINER RPC that is idempotent.
-      // Role is derived server-side from auth.users.raw_user_meta_data — we
-      // do not pass it in (the RPC ignores client-supplied roles to prevent
-      // privilege escalation).
       const ensureResp = await supabase.rpc("ensure_my_user", {
         p_name: user.name ?? "",
       });
@@ -153,8 +145,6 @@ export default function InstructorSetup() {
         return;
       }
 
-      // Race the upsert against a 15s timeout so the spinner can't hang
-      // forever on a stuck network request.
       const upsertPromise = supabase
         .from("instructor_profiles")
         .upsert(payload, { onConflict: "user_id" })
@@ -179,8 +169,6 @@ export default function InstructorSetup() {
 
       if (result.error) {
         const e = result.error;
-        // PostgREST returns code/details/hint that explain RLS / schema
-        // / FK violations far better than the bare `message` alone.
         console.warn("[instructor-setup] upsert failed", {
           message: e.message,
           code: e.code,
@@ -216,102 +204,161 @@ export default function InstructorSetup() {
         `${e.name ?? "Error"}: ${e.message ?? String(err)}`,
       );
     } finally {
-      // Always release the spinner so the button can never get stuck again.
       setSaving(false);
     }
   }
 
-  const previewPrice = toKurus(
-    parseFloat(priceTry.replace(",", ".")) || 0,
-  );
+  const previewPrice = toKurus(parseFloat(priceTry.replace(",", ".")) || 0);
 
   return (
-    <Screen contentStyle={{ gap: 14 }}>
-      <Text style={[styles.h, { color: c.foreground }]}>Hakkında</Text>
-      <Input
-        placeholder="Birkaç cümle ile kendinizi tanıtın..."
-        multiline
-        numberOfLines={4}
-        value={bio}
-        onChangeText={setBio}
-        style={{ minHeight: 100, textAlignVertical: "top" }}
+    <Screen contentStyle={{ gap: 18 }}>
+      <Header
+        eyebrow="Profil Kurulumu"
+        title="Vitrinin"
+        subtitle="Öğrenciler bu bilgileri görerek seni seçecek."
       />
 
-      <Input
-        label="Deneyim (yıl)"
-        keyboardType="number-pad"
-        value={years}
-        onChangeText={setYears}
-        placeholder="0"
-      />
+      <View style={{ gap: 12 }}>
+        <View>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.6,
+              marginBottom: 6,
+            }}
+          >
+            Hakkında
+          </Text>
+          <Input
+            placeholder="Birkaç cümle ile kendini tanıt..."
+            multiline
+            numberOfLines={4}
+            value={bio}
+            onChangeText={setBio}
+            style={{ minHeight: 110, textAlignVertical: "top" }}
+          />
+        </View>
 
-      <Input
-        label="Saatlik ücret (TL)"
-        keyboardType="decimal-pad"
-        value={priceTry}
-        onChangeText={setPriceTry}
-        placeholder="800"
-        helperText={
-          previewPrice
-            ? `Müşteriye gösterilen: ${formatTRY(Math.round(previewPrice * 1.2))} (KDV dahil)`
-            : "KDV otomatik eklenir"
-        }
-      />
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Input
+              label="Deneyim (yıl)"
+              keyboardType="number-pad"
+              value={years}
+              onChangeText={setYears}
+              placeholder="0"
+            />
+          </View>
+          <View style={{ flex: 1.4 }}>
+            <Input
+              label="Saatlik (TL)"
+              keyboardType="decimal-pad"
+              value={priceTry}
+              onChangeText={setPriceTry}
+              placeholder="800"
+            />
+          </View>
+        </View>
 
-      <Input
-        label="Sertifikalar (virgülle ayır)"
-        value={certs}
-        onChangeText={setCerts}
-        placeholder="ISIA Level 2, TKF Antrenör"
-      />
-
-      <Text style={[styles.h, { color: c.foreground, marginTop: 8 }]}>
-        Çalıştığım pistler
-      </Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {(resorts ?? []).map((r) => {
-          const active = selectedResorts.includes(r.id);
-          return (
-            <Pressable
-              key={r.id}
-              onPress={() => toggleResort(r.id)}
+        {previewPrice ? (
+          <Card tone="soft" padding={12}>
+            <Text
               style={{
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-                borderRadius: c.radius,
-                borderWidth: 1,
-                borderColor: active ? c.primary : c.border,
-                backgroundColor: active ? c.secondary : c.card,
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 12,
               }}
             >
-              <Text
-                style={{
-                  color: active ? c.primary : c.foreground,
-                  fontFamily: "Inter_500Medium",
-                }}
-              >
-                {r.name}
-              </Text>
-            </Pressable>
-          );
-        })}
+              Müşteriye gösterilen:{" "}
+              <Text style={{ color: c.foreground, fontFamily: "Inter_700Bold" }}>
+                {formatTRY(Math.round(previewPrice * 1.2))}
+              </Text>{" "}
+              (KDV dahil)
+            </Text>
+          </Card>
+        ) : null}
+
+        <Input
+          label="Sertifikalar (virgülle ayır)"
+          value={certs}
+          onChangeText={setCerts}
+          placeholder="ISIA Level 2, TKF Antrenör"
+        />
       </View>
 
-      <Card style={{ backgroundColor: c.muted }}>
-        <Text style={{ color: c.foreground, fontFamily: "Inter_500Medium" }}>
+      <View style={{ gap: 10, marginTop: 8 }}>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_500Medium",
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+          }}
+        >
+          Çalıştığım pistler
+        </Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {(resorts ?? []).map((r) => {
+            const active = selectedResorts.includes(r.id);
+            return (
+              <Pressable
+                key={r.id}
+                onPress={() => toggleResort(r.id)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                  borderWidth: 1.5,
+                  borderColor: active ? c.accent : c.borderSoft,
+                  backgroundColor: active ? c.accentSoft : c.card,
+                }}
+              >
+                <Text
+                  style={{
+                    color: active ? c.accentDeep : c.foreground,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  {r.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <Card tone="soft" padding={14}>
+        <Text
+          style={{
+            color: c.foreground,
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 13,
+          }}
+        >
           Komisyon: %3
         </Text>
-        <Text style={{ color: c.mutedForeground, fontSize: 12, marginTop: 4 }}>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 12,
+            marginTop: 4,
+            lineHeight: 18,
+          }}
+        >
           Her dersten %3 platform komisyonu kesilir. Ödemeler ders tarihinden 21
           iş günü sonra hesabınıza aktarılır.
         </Text>
       </Card>
 
-      <Button label="Kaydet" loading={saving} onPress={save} />
+      <Button variant="accent" label="Kaydet" loading={saving} onPress={save} />
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  h: { fontFamily: "Inter_700Bold", fontSize: 18 },
-});
+const styles = StyleSheet.create({});

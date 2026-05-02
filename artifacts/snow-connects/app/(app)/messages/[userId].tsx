@@ -152,15 +152,15 @@ export default function ChatScreen() {
       <View
         style={[
           styles.banner,
-          { backgroundColor: c.muted, borderBottomColor: c.border },
+          { backgroundColor: c.muted, borderBottomColor: c.borderSoft },
         ]}
       >
-        <Feather name="info" size={13} color={c.mutedForeground} />
+        <Feather name="shield" size={12} color={c.accentDeep} />
         <Text
           style={{
             color: c.mutedForeground,
+            fontFamily: "Inter_500Medium",
             fontSize: 11,
-            fontFamily: "Inter_400Regular",
             flex: 1,
           }}
         >
@@ -173,7 +173,7 @@ export default function ChatScreen() {
         keyExtractor={(m) => m.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        contentContainerStyle={{ padding: 14, gap: 8 }}
+        contentContainerStyle={{ padding: 16, gap: 8 }}
         renderItem={({ item }) => {
           const mine = item.sender_id === me.id;
           return (
@@ -181,19 +181,24 @@ export default function ChatScreen() {
               style={{
                 alignSelf: mine ? "flex-end" : "flex-start",
                 maxWidth: "82%",
-                backgroundColor: mine ? c.primary : c.card,
-                borderRadius: c.radius,
+                backgroundColor: mine ? c.accent : c.card,
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                borderBottomLeftRadius: mine ? 18 : 4,
+                borderBottomRightRadius: mine ? 4 : 18,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
-                borderWidth: mine ? 0 : 1,
-                borderColor: c.border,
+                ...(Platform.OS !== "android"
+                  ? ({ boxShadow: c.shadowSoft } as object)
+                  : { elevation: 1 }),
               }}
             >
               <Text
                 style={{
-                  color: mine ? c.primaryForeground : c.foreground,
+                  color: mine ? c.accentForeground : c.foreground,
                   fontFamily: "Inter_400Regular",
                   fontSize: 15,
+                  lineHeight: 21,
                 }}
               >
                 {item.content}
@@ -201,7 +206,7 @@ export default function ChatScreen() {
               {item.flagged ? (
                 <Text
                   style={{
-                    color: mine ? c.primaryForeground : c.destructive,
+                    color: mine ? c.accentForeground : c.destructive,
                     fontSize: 10,
                     marginTop: 4,
                     opacity: 0.85,
@@ -221,7 +226,7 @@ export default function ChatScreen() {
           styles.inputBar,
           {
             backgroundColor: c.card,
-            borderTopColor: c.border,
+            borderTopColor: c.borderSoft,
             paddingBottom: 12 + (Platform.OS === "ios" ? 0 : insets.bottom),
           },
         ]}
@@ -230,16 +235,16 @@ export default function ChatScreen() {
           ref={inputRef}
           value={draft}
           onChangeText={setDraft}
-          placeholder={`${partner?.name || "Kullanıcı"}'ya mesaj...`}
-          placeholderTextColor={c.mutedForeground}
+          placeholder={`${partner?.name || "Kullanıcı"}'ya yaz...`}
+          placeholderTextColor={c.taupeSoft ?? c.mutedForeground}
           multiline
           style={{
             flex: 1,
             color: c.foreground,
             fontFamily: "Inter_400Regular",
             fontSize: 15,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
             borderRadius: 22,
             backgroundColor: c.muted,
             maxHeight: 120,
@@ -251,12 +256,12 @@ export default function ChatScreen() {
           style={({ pressed }) => [
             styles.sendBtn,
             {
-              backgroundColor: c.primary,
-              opacity: !draft.trim() || sending ? 0.5 : pressed ? 0.85 : 1,
+              backgroundColor: c.accent,
+              opacity: !draft.trim() || sending ? 0.4 : pressed ? 0.85 : 1,
             },
           ]}
         >
-          <Feather name="arrow-up" size={20} color={c.primaryForeground} />
+          <Feather name="arrow-up" size={20} color={c.accentForeground} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -268,7 +273,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
@@ -276,13 +281,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingTop: 10,
     borderTopWidth: 1,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",

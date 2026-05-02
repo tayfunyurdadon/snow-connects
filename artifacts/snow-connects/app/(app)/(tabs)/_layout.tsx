@@ -13,11 +13,11 @@ function NativeTabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "snowflake", selected: "snowflake" }} />
-        <Label>Pistler</Label>
+        <Label>Keşfet</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="bookings">
         <Icon sf={{ default: "calendar", selected: "calendar" }} />
-        <Label>Rezervasyonlar</Label>
+        <Label>Dersler</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="messages">
         <Icon sf={{ default: "message", selected: "message.fill" }} />
@@ -25,7 +25,7 @@ function NativeTabLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
-        <Label>Profil</Label>
+        <Label>Hesap</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -42,14 +42,19 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarLabelStyle: { fontFamily: "Inter_500Medium", fontSize: 11 },
+        tabBarLabelStyle: {
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 10,
+          letterSpacing: 0.3,
+          marginTop: 2,
+        },
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.background,
           borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: colors.border,
+          borderTopColor: colors.borderSoft,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
@@ -73,16 +78,16 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Pistler",
+          title: "Keşfet",
           tabBarIcon: ({ color }) => (
-            <Feather name="map" size={22} color={color} />
+            <Feather name="compass" size={22} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="bookings"
         options={{
-          title: "Rezervasyonlar",
+          title: "Dersler",
           tabBarIcon: ({ color }) => (
             <Feather name="calendar" size={22} color={color} />
           ),
@@ -100,7 +105,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
+          title: "Hesap",
           tabBarIcon: ({ color }) => (
             <Feather name="user" size={22} color={color} />
           ),

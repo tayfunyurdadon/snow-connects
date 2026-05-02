@@ -11,7 +11,6 @@ import { useColors } from "@/hooks/useColors";
 interface Props {
   title?: string;
   description?: string;
-  /** Where to send the user after they finish signing in. */
   returnTo?: string;
 }
 
@@ -29,25 +28,23 @@ export function SignInGate({
     <Screen
       hasHeader={false}
       contentStyle={{
-        paddingTop: insets.top + 64,
+        paddingTop: insets.top + 80,
         gap: 18,
         alignItems: "center",
       }}
     >
-      <View
-        style={[
-          styles.iconWrap,
-          { backgroundColor: c.secondary, borderRadius: 100 },
-        ]}
-      >
-        <Feather name="lock" size={32} color={c.primary} />
+      <View style={[styles.iconWrap, { backgroundColor: c.accentSoft }]}>
+        <Feather name="lock" size={28} color={c.accentDeep} />
       </View>
-      <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
-      <Text style={[styles.desc, { color: c.mutedForeground }]}>
-        {description}
-      </Text>
-      <View style={{ width: "100%", gap: 10, marginTop: 12 }}>
+      <View style={{ alignItems: "center", gap: 8, paddingHorizontal: 8 }}>
+        <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
+        <Text style={[styles.desc, { color: c.mutedForeground }]}>
+          {description}
+        </Text>
+      </View>
+      <View style={{ width: "100%", gap: 10, marginTop: 16 }}>
         <Button
+          variant="accent"
           label="Giriş Yap"
           onPress={() => router.push(`/(auth)/login${next}` as never)}
         />
@@ -63,14 +60,16 @@ export function SignInGate({
 
 const styles = StyleSheet.create({
   iconWrap: {
-    width: 72,
-    height: 72,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 20,
+    fontFamily: "Fraunces_600SemiBold",
+    fontSize: 24,
+    letterSpacing: -0.5,
     textAlign: "center",
   },
   desc: {
@@ -78,6 +77,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     paddingHorizontal: 16,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 });

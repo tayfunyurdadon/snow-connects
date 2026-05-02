@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { RangeCalendar } from "@/components/ui/RangeCalendar";
 import { Screen } from "@/components/ui/Screen";
@@ -25,8 +26,6 @@ export default function DateRangePicker() {
       to?: string;
     }>();
 
-  // Allow arriving here with the previous range pre-filled (e.g. back
-  // button from the booking grid).
   const [from, setFrom] = useState<string | null>(initialFrom ?? null);
   const [to, setTo] = useState<string | null>(initialTo ?? null);
 
@@ -57,9 +56,7 @@ export default function DateRangePicker() {
 
   function onConfirm() {
     if (!canContinue) return;
-    router.push(
-      `/(app)/book/${instructorId}?from=${from}&to=${to}` as never,
-    );
+    router.push(`/(app)/book/${instructorId}?from=${from}&to=${to}` as never);
   }
 
   function onClear() {
@@ -73,18 +70,15 @@ export default function DateRangePicker() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Tarih seç" }} />
-      <Screen contentStyle={{ gap: 16 }}>
-        <View style={{ gap: 4 }}>
-          <Text style={[styles.h1, { color: c.foreground }]}>
-            Ne zaman kayacaksın?
-          </Text>
-          <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
-            {instructorName} ile ders almak istediğin günleri seç.
-          </Text>
-        </View>
+      <Stack.Screen options={{ title: "" }} />
+      <Screen contentStyle={{ gap: 18 }}>
+        <Header
+          eyebrow="Tarih seç"
+          title={`Ne zaman\nkayacaksın?`}
+          subtitle={`${instructorName} ile ders almak istediğin günleri seç. Tek gün veya birden çok gün seçebilirsin.`}
+        />
 
-        <Card>
+        <Card padding={18}>
           <View style={styles.summaryRow}>
             <SummarySlot
               label="Başlangıç"
@@ -98,32 +92,34 @@ export default function DateRangePicker() {
               empty={!to}
             />
           </View>
-          {dayCount > 0 ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              justifyContent: "center",
+              marginTop: 14,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: c.borderSoft,
+            }}
+          >
+            <Feather name="info" size={12} color={c.accentDeep} />
             <Text
               style={{
                 color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
                 fontSize: 12,
-                marginTop: 10,
-                textAlign: "center",
               }}
             >
-              {dayCount} gün · 1 Aralık – 15 Nisan arası seçilebilir
+              {dayCount > 0
+                ? `${dayCount} gün · 1 Aralık – 15 Nisan arası`
+                : "Sezon: 1 Aralık – 15 Nisan"}
             </Text>
-          ) : (
-            <Text
-              style={{
-                color: c.mutedForeground,
-                fontSize: 12,
-                marginTop: 10,
-                textAlign: "center",
-              }}
-            >
-              Sezon: 1 Aralık – 15 Nisan
-            </Text>
-          )}
+          </View>
         </Card>
 
-        <Card>
+        <Card padding={14}>
           <RangeCalendar
             from={from}
             to={to}
@@ -143,14 +139,15 @@ export default function DateRangePicker() {
           <View style={{ flex: 2 }}>
             <Button
               label={canContinue ? "Saatleri seç" : "Tarih seç"}
+              variant={canContinue ? "accent" : "primary"}
               onPress={onConfirm}
               disabled={!canContinue}
-              icon={
+              iconRight={
                 canContinue ? (
                   <Feather
                     name="arrow-right"
                     size={16}
-                    color={c.primaryForeground}
+                    color={c.accentForeground}
                   />
                 ) : undefined
               }
@@ -173,23 +170,24 @@ function SummarySlot({
 }) {
   const c = useColors();
   return (
-    <View style={{ flex: 1, gap: 2 }}>
+    <View style={{ flex: 1, gap: 4 }}>
       <Text
         style={{
           color: c.mutedForeground,
-          fontSize: 11,
-          fontFamily: "Inter_500Medium",
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 10,
           textTransform: "uppercase",
-          letterSpacing: 0.5,
+          letterSpacing: 0.8,
         }}
       >
         {label}
       </Text>
       <Text
         style={{
-          color: empty ? c.mutedForeground : c.foreground,
-          fontFamily: empty ? "Inter_400Regular" : "Inter_700Bold",
-          fontSize: 15,
+          color: empty ? c.taupeSoft ?? c.mutedForeground : c.foreground,
+          fontFamily: empty ? "Inter_500Medium" : "Fraunces_600SemiBold",
+          fontSize: empty ? 14 : 18,
+          letterSpacing: -0.3,
         }}
       >
         {value}
@@ -199,14 +197,13 @@ function SummarySlot({
 }
 
 const styles = StyleSheet.create({
-  h1: { fontFamily: "Inter_700Bold", fontSize: 22 },
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
   },
   divider: {
     width: 1,
-    height: 30,
+    height: 32,
   },
 });

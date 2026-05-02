@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -51,44 +51,68 @@ export default function InstructorDetail() {
   }
 
   const totalPrice = Math.round(data.base_price * 1.2);
+  const initial = (data.user.name || "?").slice(0, 1).toUpperCase();
+  const rating = data.rating ?? 5;
 
   return (
-    <Screen contentStyle={{ gap: 14 }}>
-      <View style={{ alignItems: "center", gap: 8 }}>
+    <Screen contentStyle={{ gap: 18, paddingBottom: 120 }}>
+      {/* HERO — large editorial portrait card */}
+      <View style={{ alignItems: "center", gap: 14, paddingTop: 8 }}>
         <View
           style={[
             styles.avatar,
-            { backgroundColor: c.primary, borderRadius: 100 },
+            {
+              backgroundColor: c.primary,
+              ...(Platform.OS !== "android"
+                ? ({ boxShadow: c.shadowLift } as object)
+                : { elevation: 6 }),
+            },
           ]}
         >
           <Text
             style={{
               color: c.primaryForeground,
-              fontFamily: "Inter_700Bold",
-              fontSize: 28,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 44,
+              letterSpacing: -1.5,
             }}
           >
-            {(data.user.name || "?").slice(0, 1).toUpperCase()}
+            {initial}
           </Text>
-        </View>
-        <Text style={[styles.name, { color: c.foreground }]}>
-          {data.user.name || "Eğitmen"}
-        </Text>
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          <View style={styles.row}>
-            <Feather name="star" size={13} color={c.warning} />
-            <Text style={{ color: c.foreground, fontSize: 13 }}>
-              {data.rating?.toFixed(1) ?? "5.0"}
+          <View style={[styles.ratingBadge, { backgroundColor: c.accent }]}>
+            <Feather name="star" size={11} color={c.accentForeground} />
+            <Text
+              style={{
+                color: c.accentForeground,
+                fontFamily: "Inter_700Bold",
+                fontSize: 12,
+              }}
+            >
+              {rating.toFixed(1)}
             </Text>
           </View>
-          <Text style={{ color: c.mutedForeground }}>·</Text>
-          <Text style={{ color: c.mutedForeground, fontSize: 13 }}>
+        </View>
+        <View style={{ alignItems: "center", gap: 4 }}>
+          <Text style={[styles.name, { color: c.foreground }]}>
+            {data.user.name || "Eğitmen"}
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 13,
+            }}
+          >
             {data.experience_years} yıl deneyim
+            {data.resorts.length > 0
+              ? ` · ${data.resorts.map((r) => r.name).join(", ")}`
+              : ""}
           </Text>
         </View>
       </View>
 
-      <Card>
+      {/* PRICE — accent-tinted, given pride of place */}
+      <Card tone="soft" padding={18}>
         <View
           style={{
             flexDirection: "row",
@@ -97,48 +121,93 @@ export default function InstructorDetail() {
           }}
         >
           <View>
-            <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-              Saatlik (KDV dahil)
-            </Text>
             <Text
               style={{
-                color: c.foreground,
-                fontFamily: "Inter_700Bold",
-                fontSize: 24,
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 11,
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
               }}
             >
-              {formatTRY(totalPrice)}
+              Saatlik ders
             </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "baseline",
+                gap: 6,
+                marginTop: 4,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontFamily: "Fraunces_700Bold",
+                  fontSize: 32,
+                  letterSpacing: -0.8,
+                }}
+              >
+                {formatTRY(totalPrice)}
+              </Text>
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 12,
+                }}
+              >
+                KDV dahil
+              </Text>
+            </View>
           </View>
-          <Feather name="tag" size={28} color={c.primary} />
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: c.accent,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="zap" size={20} color={c.accentForeground} />
+          </View>
         </View>
       </Card>
 
       {data.bio ? (
         <Card>
-          <Text style={[styles.section, { color: c.foreground }]}>
-            Hakkında
+          <Text style={[styles.section, { color: c.accentDeep }]}>
+            HAKKINDA
           </Text>
           <Text
             style={{
-              color: c.mutedForeground,
-              fontSize: 14,
-              lineHeight: 21,
-              marginTop: 6,
+              color: c.foreground,
+              fontFamily: "Fraunces_400Regular",
+              fontSize: 17,
+              lineHeight: 26,
+              marginTop: 8,
+              letterSpacing: -0.1,
             }}
           >
-            {data.bio}
+            "{data.bio}"
           </Text>
         </Card>
       ) : null}
 
       {data.certifications && data.certifications.length > 0 ? (
         <Card>
-          <Text style={[styles.section, { color: c.foreground }]}>
-            Sertifikalar
+          <Text style={[styles.section, { color: c.accentDeep }]}>
+            SERTİFİKALAR
           </Text>
           <View
-            style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 12,
+            }}
           >
             {data.certifications.map((cert) => (
               <Pill key={cert} label={cert} tone="accent" />
@@ -149,37 +218,89 @@ export default function InstructorDetail() {
 
       {data.resorts.length > 0 ? (
         <Card>
-          <Text style={[styles.section, { color: c.foreground }]}>
-            Çalıştığı pistler
+          <Text style={[styles.section, { color: c.accentDeep }]}>
+            ÇALIŞTIĞI PİSTLER
           </Text>
           <View
-            style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 12,
+            }}
           >
             {data.resorts.map((r) => (
-              <Pill key={r.id} label={r.name} />
+              <View
+                key={r.id}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: c.muted,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 999,
+                }}
+              >
+                <Feather name="triangle" size={11} color={c.foreground} />
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 12,
+                  }}
+                >
+                  {r.name}
+                </Text>
+              </View>
             ))}
           </View>
         </Card>
       ) : null}
 
-      <Button
-        label="Rezervasyon Yap"
-        onPress={() =>
-          router.push(`/(app)/dates/${data.user_id}` as never)
-        }
-      />
+      <View style={{ marginTop: 8 }}>
+        <Button
+          variant="accent"
+          size="lg"
+          label="Rezervasyon Yap"
+          iconRight={
+            <Feather name="arrow-right" size={18} color={c.accentForeground} />
+          }
+          onPress={() => router.push(`/(app)/dates/${data.user_id}` as never)}
+        />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   avatar: {
-    width: 84,
-    height: 84,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
   },
-  name: { fontFamily: "Inter_700Bold", fontSize: 22 },
-  row: { flexDirection: "row", alignItems: "center", gap: 4 },
-  section: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  ratingBadge: {
+    position: "absolute",
+    bottom: -4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  name: {
+    fontFamily: "Fraunces_600SemiBold",
+    fontSize: 28,
+    letterSpacing: -0.6,
+    textAlign: "center",
+  },
+  section: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    letterSpacing: 1.4,
+  },
 });

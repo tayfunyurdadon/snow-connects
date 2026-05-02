@@ -436,8 +436,8 @@ export default function BookScreen() {
           >
             <Text
               style={{
-                color: c.primary,
-                fontFamily: "Inter_600SemiBold",
+                color: c.accentDeep,
+                fontFamily: "Inter_700Bold",
                 fontSize: 13,
               }}
             >
@@ -459,17 +459,17 @@ export default function BookScreen() {
                   onPress={() => setResortId(r.id)}
                   style={{
                     paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: c.radius,
-                    borderWidth: 1,
-                    borderColor: active ? c.primary : c.border,
-                    backgroundColor: active ? c.secondary : c.card,
+                    paddingVertical: 10,
+                    borderRadius: 999,
+                    borderWidth: 1.5,
+                    borderColor: active ? c.accent : c.borderSoft,
+                    backgroundColor: active ? c.accentSoft : c.card,
                   }}
                 >
                   <Text
                     style={{
-                      color: active ? c.primary : c.foreground,
-                      fontFamily: "Inter_500Medium",
+                      color: active ? c.accentDeep : c.foreground,
+                      fontFamily: "Inter_600SemiBold",
                       fontSize: 13,
                     }}
                   >
@@ -513,16 +513,17 @@ export default function BookScreen() {
                     paddingVertical: 14,
                     borderRadius: c.radius,
                     borderWidth: 1,
-                    borderColor: active ? c.primary : c.border,
-                    backgroundColor: active ? c.secondary : c.card,
+                    borderColor: active ? c.accent : c.borderSoft,
+                    backgroundColor: active ? c.accentSoft : c.card,
                     alignItems: "center",
                   }}
                 >
                   <Text
                     style={{
-                      color: active ? c.primary : c.foreground,
-                      fontFamily: "Inter_600SemiBold",
-                      fontSize: 15,
+                      color: active ? c.accentDeep : c.foreground,
+                      fontFamily: "Fraunces_600SemiBold",
+                      fontSize: 18,
+                      letterSpacing: -0.3,
                     }}
                   >
                     {n === 4 ? "4+" : n}
@@ -617,8 +618,8 @@ export default function BookScreen() {
                           paddingVertical: 12,
                           borderRadius: c.radius,
                           borderWidth: 1,
-                          borderColor: active ? c.primary : c.border,
-                          backgroundColor: active ? c.secondary : c.card,
+                          borderColor: active ? c.accent : c.borderSoft,
+                          backgroundColor: active ? c.accentSoft : c.card,
                           flexDirection: "row",
                           alignItems: "center",
                           justifyContent: "space-between",
@@ -626,8 +627,9 @@ export default function BookScreen() {
                       >
                         <Text
                           style={{
-                            color: active ? c.primary : c.foreground,
-                            fontFamily: "Inter_500Medium",
+                            color: active ? c.accentDeep : c.foreground,
+                            fontFamily: "Inter_600SemiBold",
+                            fontSize: 14,
                           }}
                         >
                           {lvl.label}
@@ -636,7 +638,7 @@ export default function BookScreen() {
                           <Feather
                             name="check"
                             size={16}
-                            color={c.primary}
+                            color={c.accentDeep}
                           />
                         ) : null}
                       </Pressable>
@@ -665,6 +667,8 @@ export default function BookScreen() {
           </Card>
 
           <Button
+            variant="accent"
+            size="lg"
             label={
               !session
                 ? `Onayla ve giriş yap · ${formatTRY(totals.total)}`
@@ -817,12 +821,12 @@ function SlotGrid({
                 const bg = disabled
                   ? c.muted
                   : selected
-                    ? c.primary
+                    ? c.accent
                     : c.card;
                 const fg = disabled
                   ? c.mutedForeground
                   : selected
-                    ? c.primaryForeground
+                    ? c.accentForeground
                     : c.foreground;
 
                 return (
@@ -850,7 +854,7 @@ function SlotGrid({
                         height: 6,
                         borderRadius: 3,
                         backgroundColor:
-                          selected || disabled ? "transparent" : c.primary,
+                          selected || disabled ? "transparent" : c.accent,
                         opacity: selected || disabled ? 0 : 0.85,
                       }}
                     />

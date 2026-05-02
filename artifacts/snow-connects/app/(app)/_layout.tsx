@@ -17,19 +17,22 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: c.background },
+        headerShadowVisible: false,
         headerTitleStyle: {
           color: c.foreground,
           fontFamily: "Inter_600SemiBold",
+          fontSize: 16,
         },
-        headerTintColor: c.primary,
+        headerTintColor: c.foreground,
         headerBackTitle: "Geri",
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="resort/[id]" options={{ title: "Eğitmenler" }} />
+      <Stack.Screen name="resort/[id]" options={{ title: "" }} />
+      <Stack.Screen name="instructor/[id]" options={{ title: "" }} />
       <Stack.Screen
-        name="instructor/[id]"
-        options={{ title: "Eğitmen Profili" }}
+        name="dates/[instructorId]"
+        options={{ title: "Tarih seç" }}
       />
       <Stack.Screen
         name="book/[instructorId]"

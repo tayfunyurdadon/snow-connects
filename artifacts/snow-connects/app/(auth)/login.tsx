@@ -41,35 +41,41 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen hasHeader={false} contentStyle={{ gap: 18, paddingTop: 64 }}>
+    <Screen hasHeader={false} contentStyle={{ gap: 22, paddingTop: 72 }}>
       <Pressable
         onPress={() => router.replace("/(app)/(tabs)")}
         style={styles.cancel}
       >
-        <Feather name="x" size={20} color={c.mutedForeground} />
-        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_500Medium" }}>
-          Misafir olarak gez
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_500Medium",
+            fontSize: 13,
+          }}
+        >
+          Misafir gez
         </Text>
+        <Feather name="arrow-right" size={14} color={c.mutedForeground} />
       </Pressable>
 
       <View style={styles.brand}>
-        <View
-          style={[
-            styles.logoCircle,
-            { backgroundColor: c.primary, borderRadius: 100 },
-          ]}
-        >
-          <Feather name="cloud-snow" size={36} color={c.primaryForeground} />
+        <View style={[styles.logoCircle, { backgroundColor: c.primary }]}>
+          <Feather name="triangle" size={28} color={c.accent} />
         </View>
-        <Text style={[styles.title, { color: c.foreground }]}>
-          Snow Connects
-        </Text>
-        <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-          Türkiye'nin en iyi kayak eğitmenleriyle buluşun
-        </Text>
+        <View style={{ alignItems: "center", gap: 8, marginTop: 4 }}>
+          <Text style={[styles.eyebrow, { color: c.accentDeep }]}>
+            SNOW CONNECTS
+          </Text>
+          <Text style={[styles.title, { color: c.foreground }]}>
+            {`Hoş geldin\ntekrar.`}
+          </Text>
+          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
+            Türkiye'nin en sevilen kayak eğitmenleriyle.
+          </Text>
+        </View>
       </View>
 
-      <View style={{ gap: 12, marginTop: 12 }}>
+      <View style={{ gap: 12, marginTop: 8 }}>
         <Input
           label="E-posta"
           autoCapitalize="none"
@@ -86,11 +92,25 @@ export default function LoginScreen() {
           onChangeText={setPassword}
           placeholder="••••••••"
         />
-        <Button label="Giriş Yap" loading={loading} onPress={onSubmit} />
+        <View style={{ marginTop: 4 }}>
+          <Button
+            variant="accent"
+            size="lg"
+            label="Giriş Yap"
+            loading={loading}
+            onPress={onSubmit}
+          />
+        </View>
       </View>
 
       <View style={styles.footer}>
-        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 13,
+          }}
+        >
           Hesabın yok mu?{" "}
         </Text>
         <Link
@@ -101,7 +121,13 @@ export default function LoginScreen() {
           }
           replace
         >
-          <Text style={{ color: c.primary, fontFamily: "Inter_600SemiBold" }}>
+          <Text
+            style={{
+              color: c.accentDeep,
+              fontFamily: "Inter_700Bold",
+              fontSize: 13,
+            }}
+          >
             Kayıt ol
           </Text>
         </Link>
@@ -112,7 +138,6 @@ export default function LoginScreen() {
 
 function resolveTarget(next: string | undefined, role: string | undefined): string {
   if (next) return next;
-  // Role-aware landing handled inside the home tab itself.
   return "/(app)/(tabs)";
 }
 
@@ -124,17 +149,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    padding: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     zIndex: 10,
   },
-  brand: { alignItems: "center", gap: 12 },
+  brand: { alignItems: "center", gap: 14 },
   logoCircle: {
-    width: 80,
-    height: 80,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontFamily: "Inter_700Bold", fontSize: 28, letterSpacing: -0.5 },
+  eyebrow: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+    letterSpacing: 2.5,
+  },
+  title: {
+    fontFamily: "Fraunces_600SemiBold",
+    fontSize: 36,
+    letterSpacing: -1,
+    textAlign: "center",
+    lineHeight: 40,
+  },
   subtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,

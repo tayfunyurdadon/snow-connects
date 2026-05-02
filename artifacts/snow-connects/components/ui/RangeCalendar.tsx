@@ -123,16 +123,18 @@ export function RangeCalendar({ from, to, onChange, minDate }: Props) {
           // - endpoint days get the solid primary fill on top
           // - everything else is transparent
           const backgroundColor = endpoint
-            ? c.primary
+            ? c.accent
             : isBetween
-              ? c.secondary
+              ? c.accentSoft
               : "transparent";
 
           const textColor = endpoint
-            ? c.primaryForeground
+            ? c.accentForeground
             : !allowed
               ? c.slateMuted
-              : c.foreground;
+              : isBetween
+                ? c.accentDeep
+                : c.foreground;
 
           return (
             <Pressable
