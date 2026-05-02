@@ -175,6 +175,22 @@ export default function BookScreen() {
     return m;
   }, [existingSlots]);
 
+  // Prune stale selections after fresh slot data arrives (e.g. someone else
+  // booked one of the user's selected slots while they were filling in
+  // student info, or a hydrated draft references a now-unavailable slot).
+  // Without this, a "selected but disabled" cell would persist in state and
+  // submit() would 409 against the server's slot lock.
+  useEffect(() => {
+    if (!date || selectedSlots.length === 0) return;
+    const stillValid = selectedSlots.filter((slotId) => {
+      const existing = slotIndex.get(`${date}|${slotId}`);
+      return !existing || existing.status === "available";
+    });
+    if (stillValid.length !== selectedSlots.length) {
+      setSelectedSlots(stillValid);
+    }
+  }, [slotIndex, date, selectedSlots]);
+
   useEffect(() => {
     if (resorts && resorts.length === 1 && !resortId) {
       setResortId(resorts[0].id);
@@ -195,8 +211,6 @@ export default function BookScreen() {
     const vat = Math.round(base * 0.2);
     return { base, vat, total: base + vat };
   }, [instructor, selectedSlots.length]);
-
-  const customerPerSlot = Math.round((instructor?.base_price ?? 0) * 1.2);
 
   if (isLoading || !instructor || !draftHydrated) return <Loading />;
 
@@ -388,7 +402,7 @@ export default function BookScreen() {
         </View>
 
         <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-          Hücreye dokunarak fiyatı seçin · KDV dahil
+          Boş bir saat seçin · her ders 50 dakika
         </Text>
 
         <SlotGrid
@@ -396,7 +410,6 @@ export default function BookScreen() {
           selectedDate={date}
           selectedSlots={selectedSlots}
           slotIndex={slotIndex}
-          customerPerSlot={customerPerSlot}
           onTap={tapCell}
         />
       </View>
@@ -613,14 +626,12 @@ function SlotGrid({
   selectedDate,
   selectedSlots,
   slotIndex,
-  customerPerSlot,
   onTap,
 }: {
   dates: Date[];
   selectedDate: string | null;
   selectedSlots: string[];
   slotIndex: Map<string, TimeSlot>;
-  customerPerSlot: number;
   onTap: (date: string, slotId: string) => void;
 }) {
   const c = useColors();
@@ -714,23 +725,30 @@ function SlotGrid({
                 const existing = slotIndex.get(`${iso}|${s.id}`);
                 const taken =
                   !!existing && existing.status !== "available";
-                const selected =
-                  selectedDate === iso && selectedSlots.includes(s.id);
                 const disabled = !inSeason || taken;
-                const bg = !inSeason
+                // Disabled wins over selected — a slot that became taken
+                // after the user picked it (e.g. draft restored from
+                // AsyncStorage) should render gray, not navy.
+                const selected =
+                  !disabled &&
+                  selectedDate === iso &&
+                  selectedSlots.includes(s.id);
+
+                // Visual hierarchy (disabled checked FIRST):
+                //  - taken/out → flat muted gray, no dot, low opacity
+                //  - selected  → solid dark navy fill, white text
+                //  - available → white card with subtle dot affordance
+                const bg = disabled
                   ? c.muted
-                  : taken
-                    ? c.muted
-                    : selected
-                      ? c.primary
-                      : c.card;
-                const fg = !inSeason
+                  : selected
+                    ? c.primary
+                    : c.card;
+                const fg = disabled
                   ? c.mutedForeground
-                  : taken
-                    ? c.mutedForeground
-                    : selected
-                      ? c.primaryForeground
-                      : c.foreground;
+                  : selected
+                    ? c.primaryForeground
+                    : c.foreground;
+
                 return (
                   <Pressable
                     key={s.id}
@@ -738,45 +756,40 @@ function SlotGrid({
                     onPress={() => onTap(iso, s.id)}
                     style={{
                       width: cellW,
-                      paddingVertical: 14,
+                      paddingVertical: 12,
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: bg,
                       borderLeftWidth: 1,
                       borderLeftColor: c.border,
-                      opacity: disabled ? 0.55 : 1,
+                      opacity: disabled ? 0.5 : 1,
+                      gap: 4,
                     }}
                   >
-                    {!inSeason ? (
-                      <Feather
-                        name="x"
-                        size={14}
-                        color={c.mutedForeground}
-                      />
-                    ) : taken ? (
-                      <Text
-                        style={{
-                          color: fg,
-                          fontFamily: "Inter_500Medium",
-                          fontSize: 11,
-                        }}
-                      >
-                        Dolu
-                      </Text>
-                    ) : (
-                      <Text
-                        style={{
-                          color: fg,
-                          fontFamily: selected
-                            ? "Inter_700Bold"
-                            : "Inter_600SemiBold",
-                          fontSize: 11,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {formatTRY(customerPerSlot)}
-                      </Text>
-                    )}
+                    {/* Tap-affordance dot. Hidden for disabled and selected
+                        cells (selection itself signals state). */}
+                    <View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor:
+                          selected || disabled ? "transparent" : c.primary,
+                        opacity: selected || disabled ? 0 : 0.85,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: fg,
+                        fontFamily: selected
+                          ? "Inter_700Bold"
+                          : "Inter_500Medium",
+                        fontSize: 11,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {!inSeason ? "—" : taken ? "Dolu" : "50 dk"}
+                    </Text>
                   </Pressable>
                 );
               })}
