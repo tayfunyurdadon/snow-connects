@@ -5,18 +5,20 @@ const palette = {
   ice50: "#f6f8fb",
   ice100: "#eaf0f6",
   ice200: "#cfdbe6",
-  // Deep editorial navy — base brand color.
-  navy: "#0A1628",
-  navyDeep: "#050d1a",
+  // Deep editorial navy — base brand color (Val d'Isère palette).
+  navy: "#0D1B2A",
+  navyDeep: "#06101c",
   navySoft: "#1a2a44",
   navyMuted: "#2c3e5b",
-  // Bold premium red — used for active states and accent flags.
-  red: "#E11D2E",
-  redDark: "#b81522",
-  slate: "#475569",
+  // Crimson red — used for active states, dashes and CTA buttons.
+  red: "#C41230",
+  redDark: "#9c0d24",
+  slate: "#4A5568",
   slateMuted: "#8a96a7",
   border: "#e3e7ec",
   borderStrong: "#cdd5df",
+  // Soft ice blue-gray for grouped cards and inset surfaces.
+  iceCard: "#F0F4F8",
   danger: "#dc2626",
   warning: "#d97706",
   success: "#059669",
@@ -39,7 +41,7 @@ const colors = {
     primary: palette.navy,
     primaryForeground: palette.white,
 
-    secondary: palette.ice100,
+    secondary: palette.iceCard,
     secondaryForeground: palette.navy,
 
     muted: palette.ice50,
@@ -67,6 +69,7 @@ const colors = {
     overlayDark: palette.overlayDark,
     paper: palette.paper,
     bone: palette.bone,
+    iceCard: palette.iceCard,
   },
   radius: 18,
 };

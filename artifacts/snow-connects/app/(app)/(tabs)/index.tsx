@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -54,9 +55,10 @@ function CustomerHome() {
   });
 
   return (
+    <>
     <Screen
       padded={false}
-      contentStyle={{ paddingBottom: 110, gap: 0 }}
+      contentStyle={{ paddingBottom: 180, gap: 0 }}
       refreshing={isRefetching}
       onRefresh={refetch}
       hasHeader
@@ -67,38 +69,44 @@ function CustomerHome() {
         onSignIn={!user ? () => router.push("/(auth)/login") : undefined}
       />
 
-      <View style={{ paddingHorizontal: 22, paddingTop: 28, gap: 8 }}>
-        <Text
-          style={{
-            color: c.accent,
-            fontFamily: "Inter_700Bold",
-            fontSize: 11,
-            letterSpacing: 2.5,
-            textTransform: "uppercase",
-          }}
-        >
-          The Collection · 2026
-        </Text>
-        <Text
-          style={{
-            color: c.foreground,
-            fontFamily: "PlayfairDisplay_700Bold",
-            fontSize: 38,
-            lineHeight: 44,
-            letterSpacing: -0.5,
-          }}
-        >
-          Türkiye'nin{"\n"}zirvesi seni bekliyor.
-        </Text>
+      <View style={{ paddingHorizontal: 22, paddingTop: 28, gap: 10 }}>
+        <DashLabel label="Snow Connects · 2026" />
+        <View>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "PlayfairDisplay_700Bold",
+              fontSize: 40,
+              lineHeight: 46,
+              letterSpacing: -0.5,
+            }}
+          >
+            The summit
+          </Text>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "PlayfairDisplay_600SemiBold",
+              fontSize: 36,
+              lineHeight: 42,
+              letterSpacing: -0.3,
+              opacity: 0.55,
+              marginTop: 2,
+            }}
+          >
+            of our dreams.
+          </Text>
+        </View>
         <Text
           style={{
             color: c.mutedForeground,
-            fontSize: 14,
-            lineHeight: 21,
-            marginTop: 6,
+            fontSize: 13,
+            lineHeight: 20,
+            marginTop: 8,
+            letterSpacing: 0.3,
           }}
         >
-          Yedi efsane pist · seçkin eğitmenler · özel ders.
+          KIŞ SEZONU: 1 ARALIK 2025 — 30 NİSAN 2026
         </Text>
       </View>
 
@@ -151,6 +159,99 @@ function CustomerHome() {
         )}
       </View>
     </Screen>
+    <BookingBar />
+    </>
+  );
+}
+
+function BookingBar() {
+  const c = useColors();
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 84,
+        paddingHorizontal: 14,
+        paddingBottom: 10,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          backgroundColor: c.primary,
+          paddingVertical: 10,
+          paddingLeft: 16,
+          paddingRight: 10,
+          borderRadius: 14,
+          ...(Platform.OS === "web"
+            ? { boxShadow: "0 12px 28px rgba(10,22,40,0.25)" }
+            : {
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.25,
+                shadowRadius: 16,
+                elevation: 10,
+              }),
+        }}
+      >
+        <Feather name="search" size={16} color="#fff" />
+        <Text
+          style={{
+            color: "#fff",
+            fontFamily: "Inter_500Medium",
+            fontSize: 13,
+            flex: 1,
+          }}
+        >
+          Pist veya eğitmen ara
+        </Text>
+        <View
+          style={{
+            backgroundColor: c.accent,
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 10,
+          }}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontFamily: "Inter_700Bold",
+              fontSize: 12,
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+            }}
+          >
+            Rezervasyon
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function DashLabel({ label }: { label: string }) {
+  const c = useColors();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <View style={{ width: 28, height: 2, backgroundColor: c.accent }} />
+      <Text
+        style={{
+          color: c.foreground,
+          fontFamily: "Inter_700Bold",
+          fontSize: 11,
+          letterSpacing: 2.5,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -176,17 +277,13 @@ function BrandHeader({
         justifyContent: "space-between",
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
         <View
           style={{
-            width: 0,
-            height: 0,
-            borderLeftWidth: 8,
-            borderRightWidth: 8,
-            borderBottomWidth: 14,
-            borderLeftColor: "transparent",
-            borderRightColor: "transparent",
-            borderBottomColor: c.accent,
+            width: 16,
+            height: 16,
+            backgroundColor: c.accent,
+            transform: [{ rotate: "45deg" }],
           }}
         />
         <Text
@@ -271,23 +368,26 @@ function ResortHeroCard({
         </Text>
       </View>
       <View style={styles.heroBody}>
-        <Text style={styles.heroRegion}>{resort.region.toUpperCase()}</Text>
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+        >
+          <View
+            style={{ width: 22, height: 2, backgroundColor: c.accent }}
+          />
+          <Text style={styles.heroRegion}>{resort.region.toUpperCase()}</Text>
+        </View>
         <Text style={styles.heroTitle}>{resort.name}</Text>
         <View style={styles.heroCta}>
-          <Text style={styles.heroCtaText}>Eğitmenleri keşfet</Text>
           <View
             style={{
-              width: 0,
-              height: 0,
-              borderTopWidth: 5,
-              borderBottomWidth: 5,
-              borderLeftWidth: 8,
-              borderTopColor: "transparent",
-              borderBottomColor: "transparent",
-              borderLeftColor: c.accent,
-              marginLeft: 10,
+              width: 10,
+              height: 10,
+              backgroundColor: c.accent,
+              transform: [{ rotate: "45deg" }],
+              marginRight: 10,
             }}
           />
+          <Text style={styles.heroCtaText}>Eğitmenleri keşfet</Text>
         </View>
       </View>
     </Pressable>
@@ -540,8 +640,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   heroRegion: {
-    color: "rgba(255,255,255,0.85)",
-    fontFamily: "Inter_600SemiBold",
+    color: "rgba(255,255,255,0.92)",
+    fontFamily: "Inter_700Bold",
     fontSize: 11,
     letterSpacing: 2.5,
   },
