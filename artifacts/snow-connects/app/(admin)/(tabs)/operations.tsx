@@ -143,6 +143,9 @@ function BookingsTab() {
                   }
                   size="sm"
                 />
+                {b.is_test_booking ? (
+                  <AdminPill label="TEST" tone="info" size="sm" />
+                ) : null}
               </View>
             </View>
             <Text

@@ -141,6 +141,7 @@ export interface Booking {
   lesson_status: "upcoming" | "completed" | "cancelled";
   lesson_date: string;
   created_at: string;
+  is_test_booking: boolean;
 }
 
 export interface Message {
@@ -188,6 +189,7 @@ export interface AppConfig {
   season_start_day: number;
   season_end_month: number;
   season_end_day: number;
+  test_mode: boolean;
 }
 
 export const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [

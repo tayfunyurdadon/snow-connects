@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import {
   AdminButton,
@@ -280,11 +280,115 @@ function SettingsTab() {
     qc.invalidateQueries({ queryKey: ["admin-config"] });
   }
 
+  async function toggleTestMode(next: boolean) {
+    const { error } = await supabase.rpc("admin_set_test_mode", { p_on: next });
+    if (error) {
+      Alert.alert("Hata", error.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["admin-config"] });
+  }
+
   if (isLoading) return <AdminSpinner />;
   if (!data) return <AdminEmpty title="Ayarlar yüklenemedi" />;
 
   return (
     <>
+      <AdminCard padding={16}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                color: adminTheme.textMuted,
+                fontFamily: adminTheme.fontTitle,
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: 0.6,
+                marginBottom: 4,
+              }}
+            >
+              Test Modu
+            </Text>
+            <Text
+              style={{
+                color: adminTheme.text,
+                fontFamily: adminTheme.fontBody,
+                fontSize: 13,
+                lineHeight: 18,
+              }}
+            >
+              Açıkken yeni rezervasyonlarda ödeme adımı atlanır ve booking
+              "TEST" rozetiyle işaretlenir. Sadece test ortamı için.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: data.test_mode }}
+            onPress={() => toggleTestMode(!data.test_mode)}
+            style={{
+              width: 56,
+              height: 32,
+              borderRadius: 999,
+              padding: 3,
+              backgroundColor: data.test_mode
+                ? adminTheme.accent
+                : adminTheme.surfaceMuted,
+              borderWidth: 1,
+              borderColor: adminTheme.border,
+              justifyContent: "center",
+              alignItems: data.test_mode ? "flex-end" : "flex-start",
+            }}
+          >
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 999,
+                backgroundColor: "#fff",
+              }}
+            />
+          </Pressable>
+        </View>
+        {data.test_mode ? (
+          <View
+            style={{
+              marginTop: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 10,
+              borderRadius: 8,
+              backgroundColor: adminTheme.surfaceMuted,
+            }}
+          >
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color={adminTheme.accent}
+            />
+            <Text
+              style={{
+                color: adminTheme.text,
+                fontFamily: adminTheme.fontBody,
+                fontSize: 12,
+                flex: 1,
+              }}
+            >
+              Test modu aktif. Yeni rezervasyonlar gerçek ödeme almadan
+              "paid" olarak işaretlenir.
+            </Text>
+          </View>
+        ) : null}
+      </AdminCard>
+
       <AdminCard padding={16}>
         <Text
           style={{

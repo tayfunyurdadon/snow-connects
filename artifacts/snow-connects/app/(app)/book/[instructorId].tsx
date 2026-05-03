@@ -331,6 +331,7 @@ export default function BookScreen() {
       ([a], [b]) => a.localeCompare(b),
     );
     const createdIds: string[] = [];
+    let autoPaid = false;
     for (const [d, slots] of grouped) {
       const { data, error } = await supabase.rpc("create_booking", {
         p_instructor: instructorId,
@@ -362,11 +363,31 @@ export default function BookScreen() {
         return;
       }
       createdIds.push((data as { booking_id: string }).booking_id);
+      // Track whether test mode auto-paid the booking. When on, every
+      // booking comes back already paid and we should skip the payment
+      // screen entirely.
+      if ((data as { payment_status?: string }).payment_status === "paid") {
+        autoPaid = true;
+      }
     }
     setSubmitting(false);
     await clearDraft();
 
-    if (createdIds.length === 1) {
+    if (autoPaid) {
+      // Test mode: no payment step. Confirm and route to bookings.
+      Alert.alert(
+        "🎿 Rezervasyonun onaylandı!",
+        createdIds.length === 1
+          ? "Test modu açık olduğu için ödeme atlandı."
+          : `${createdIds.length} ders oluşturuldu. Test modu açık olduğu için ödeme atlandı.`,
+        [
+          {
+            text: "Rezervasyonlarım",
+            onPress: () => router.replace("/(app)/(tabs)/bookings"),
+          },
+        ],
+      );
+    } else if (createdIds.length === 1) {
       // Single-day booking → straight to its payment page (no extra tap).
       router.replace(`/(app)/payment/${createdIds[0]}`);
     } else {

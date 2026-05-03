@@ -1224,3 +1224,22 @@ begin
   return json_build_object('booking_id', v_booking_id, 'total', v_total, 'vat', v_vat);
 end;
 $$;
+
+------------------------------------------------------------
+-- Phase 1: Test Mode (admin-toggleable, skips real payment)
+------------------------------------------------------------
+alter table app_config add column if not exists test_mode boolean not null default false;
+alter table bookings   add column if not exists is_test_booking boolean not null default false;
+
+create or replace function admin_set_test_mode(p_on boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'admins only'; end if;
+  update public.app_config set test_mode = p_on where id = 1;
+end;
+$$;
+grant execute on function admin_set_test_mode(boolean) to authenticated;
+
+-- create_booking is replaced again in supabase/migrations/2026_05_phase1_test_mode.sql
+-- to (a) read test_mode and (b) include payment_status + is_test_booking in the
+-- returned JSON so the client can skip /payment when test mode is on.

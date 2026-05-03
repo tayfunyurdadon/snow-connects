@@ -162,7 +162,10 @@ export default function BookingsTab() {
                       {b.resort?.name ?? "Pist"}
                     </Text>
                   </View>
-                  <PaymentPill status={b.payment_status} />
+                  <View style={{ alignItems: "flex-end", gap: 6 }}>
+                    {b.is_test_booking ? <TestBadge /> : null}
+                    <PaymentPill status={b.payment_status} />
+                  </View>
                 </View>
 
                 <View
@@ -228,6 +231,10 @@ function Row({
       </Text>
     </View>
   );
+}
+
+function TestBadge() {
+  return <Pill label="TEST" tone="ink" size="sm" />;
 }
 
 function PaymentPill({ status }: { status: Booking["payment_status"] }) {
