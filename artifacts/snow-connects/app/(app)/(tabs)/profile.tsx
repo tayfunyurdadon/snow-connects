@@ -1,7 +1,8 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
@@ -13,7 +14,6 @@ import { SignInGate } from "@/components/ui/SignInGate";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { confirm } from "@/lib/confirm";
 
 export default function ProfileTab() {
   const c = useColors();
@@ -22,25 +22,84 @@ export default function ProfileTab() {
   const { user, signOut } = useAuth();
   const toast = useToast();
 
-  async function handleSignOut() {
-    const ok = await confirm({
-      title: "Çıkış yapmak istediğinizden emin misiniz?",
-      confirmLabel: "Çıkış Yap",
-      cancelLabel: "İptal",
-      destructive: true,
-    });
-    if (!ok) return;
+  // Performs the actual sign-out work after the user confirmed. Kept as a
+  // local helper so both the web (window.confirm) and native (Alert.alert)
+  // confirmation paths funnel through identical logic, including
+  // AsyncStorage cleanup and navigation reset.
+  async function performSignOut() {
+    console.log("[signOut] confirmed, calling supabase.auth.signOut");
     try {
+      // Step 1: tell context + Supabase. The context's signOut already
+      // calls supabase.auth.signOut and clears in-memory state; calling
+      // it directly keeps the screen + provider in sync.
       await signOut();
-    } catch (e) {
-      toast.show(
-        e instanceof Error ? e.message : "Çıkış yapılamadı",
-        "danger",
+
+      // Step 2: defensively wipe any Supabase auth keys still in
+      // AsyncStorage. supabase-js usually does this on signOut, but if
+      // the previous session was corrupted (e.g. the bug we just hit
+      // with profile fetch) leftover keys could rehydrate a stale
+      // session on next launch.
+      const keys = await AsyncStorage.getAllKeys();
+      const supabaseKeys = keys.filter(
+        (k) => k.startsWith("sb-") || k.startsWith("supabase."),
       );
+      if (supabaseKeys.length > 0) {
+        console.log("[signOut] clearing AsyncStorage keys:", supabaseKeys);
+        await AsyncStorage.multiRemove(supabaseKeys);
+      }
+
+      console.log("[signOut] success, redirecting to discover (guest mode)");
+      toast.show("Çıkış yapıldı", "success");
+      // Reset the navigation stack so the user can't swipe back into a
+      // protected screen, then land on the public discover tab.
+      router.replace("/(app)/(tabs)");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn("[signOut] failed:", msg, e);
+      Alert.alert("Çıkış yapılamadı", msg);
+      toast.show(msg || "Çıkış yapılamadı", "danger");
+    }
+  }
+
+  function handleSignOut() {
+    console.log("[signOut] tapped, platform=", Platform.OS);
+    // Use platform-native confirmation directly here (not the shared
+    // `confirm` helper) so we get true two-button styling on iOS
+    // (red destructive "Çıkış Yap", gray cancel "İptal") and a real
+    // browser confirm on web. The previous helper-based path was
+    // silently no-op'ing for some users.
+    if (Platform.OS === "web") {
+      const ok =
+        typeof globalThis !== "undefined" &&
+        typeof globalThis.confirm === "function"
+          ? globalThis.confirm("Çıkış yapmak istediğinizden emin misiniz?")
+          : true;
+      if (!ok) {
+        console.log("[signOut] cancelled (web)");
+        return;
+      }
+      void performSignOut();
       return;
     }
-    toast.show("Çıkış yapıldı", "success");
-    router.replace("/(app)/(tabs)");
+    Alert.alert(
+      "Çıkış yapmak istediğinizden emin misiniz?",
+      undefined,
+      [
+        {
+          text: "İptal",
+          style: "cancel",
+          onPress: () => console.log("[signOut] cancelled"),
+        },
+        {
+          text: "Çıkış Yap",
+          style: "destructive",
+          onPress: () => {
+            void performSignOut();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
   }
 
   const roleLabel: Record<string, string> = {

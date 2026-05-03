@@ -91,9 +91,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    console.log("[auth] signOut: calling supabase.auth.signOut");
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.warn("[auth] signOut error:", error.message);
+      // Still clear local state so the UI doesn't pretend we're logged
+      // in when Supabase already invalidated the session (e.g. token
+      // expired). Re-throw so the caller can surface the message.
+      setUser(null);
+      setSession(null);
+      throw error;
+    }
     setUser(null);
     setSession(null);
+    console.log("[auth] signOut: cleared local session");
   }, []);
 
   return (
