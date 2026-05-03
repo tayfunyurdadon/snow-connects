@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -21,12 +21,21 @@ export default function ProfileTab() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const toast = useToast();
+  // Guard against double-taps on the destructive confirm. Without this
+  // a user who taps "Çıkış Yap" twice in the dialog would fire two
+  // signOut calls and two AsyncStorage wipes in quick succession.
+  const [signingOut, setSigningOut] = useState(false);
 
   // Performs the actual sign-out work after the user confirmed. Kept as a
   // local helper so both the web (window.confirm) and native (Alert.alert)
   // confirmation paths funnel through identical logic, including
   // AsyncStorage cleanup and navigation reset.
   async function performSignOut() {
+    if (signingOut) {
+      console.log("[signOut] already in flight, ignoring duplicate tap");
+      return;
+    }
+    setSigningOut(true);
     console.log("[signOut] confirmed, calling supabase.auth.signOut");
     try {
       // Step 1: tell context + Supabase. The context's signOut already
@@ -58,6 +67,8 @@ export default function ProfileTab() {
       console.warn("[signOut] failed:", msg, e);
       Alert.alert("Çıkış yapılamadı", msg);
       toast.show(msg || "Çıkış yapılamadı", "danger");
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -217,7 +228,12 @@ export default function ProfileTab() {
       </View>
 
       <View style={{ marginTop: 8 }}>
-        <Button label="Çıkış Yap" variant="ghost" onPress={handleSignOut} />
+        <Button
+          label="Çıkış Yap"
+          variant="ghost"
+          loading={signingOut}
+          onPress={handleSignOut}
+        />
       </View>
     </Screen>
   );

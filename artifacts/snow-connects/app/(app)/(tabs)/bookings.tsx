@@ -60,8 +60,12 @@ export default function BookingsTab() {
         .select("*, resort:resorts(name, region)")
         .eq(filter, user.id)
         .order("lesson_date", { ascending: false });
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(
+      // Track the timer handle so we can clear it as soon as the query
+      // resolves. Without this the timer keeps firing in the background
+      // for the full 10s after a fast response — harmless but wasteful.
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
           () =>
             reject(
               new Error(
@@ -69,12 +73,15 @@ export default function BookingsTab() {
               ),
             ),
           QUERY_TIMEOUT_MS,
-        ),
-      );
-      const { data, error } = await Promise.race([
-        queryPromise,
-        timeoutPromise,
-      ]);
+        );
+      });
+      let raced;
+      try {
+        raced = await Promise.race([queryPromise, timeoutPromise]);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
+      const { data, error } = raced;
       const ms = Date.now() - t0;
       if (error) {
         console.warn(
