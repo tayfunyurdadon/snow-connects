@@ -57,6 +57,7 @@ export default function AppLayout() {
         options={{ title: "Ödeme Detayı" }}
       />
       <Stack.Screen name="admin/index" options={{ title: "Yönetici Paneli" }} />
+      <Stack.Screen name="support" options={{ title: "Yardım & Destek" }} />
     </Stack>
   );
 }

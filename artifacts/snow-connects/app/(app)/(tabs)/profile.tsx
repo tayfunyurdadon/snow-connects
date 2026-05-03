@@ -124,6 +124,13 @@ export default function ProfileTab() {
             onPress={() => router.push("/(app)/admin")}
           />
         ) : null}
+
+        <ActionRow
+          icon="life-buoy"
+          label="Yardım & Destek"
+          hint="WhatsApp, canlı sohbet, e-posta ve SSS"
+          onPress={() => router.push("/(app)/support")}
+        />
       </View>
 
       <View style={{ marginTop: 8 }}>

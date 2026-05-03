@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateShortTR, formatTRY } from "@/lib/format";
@@ -665,6 +666,8 @@ export default function BookScreen() {
               bold
             />
           </Card>
+
+          <SupportBanner />
 
           <Button
             variant="accent"

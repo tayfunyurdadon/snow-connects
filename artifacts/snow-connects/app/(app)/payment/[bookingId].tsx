@@ -11,6 +11,7 @@ import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -227,6 +228,8 @@ export default function PaymentScreen() {
       >
         Ödeme onaylandığında eğitmen takvimindeki saatler otomatik kilitlenir.
       </Text>
+
+      <SupportBanner variant="tinted" />
     </Screen>
   );
 }
