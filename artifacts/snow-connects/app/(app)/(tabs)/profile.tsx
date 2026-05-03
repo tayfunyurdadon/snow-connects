@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Alert, Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
@@ -10,14 +10,38 @@ import { Header } from "@/components/ui/Header";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { SignInGate } from "@/components/ui/SignInGate";
+import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { confirm } from "@/lib/confirm";
 
 export default function ProfileTab() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const toast = useToast();
+
+  async function handleSignOut() {
+    const ok = await confirm({
+      title: "Çıkış yapmak istediğinizden emin misiniz?",
+      confirmLabel: "Çıkış Yap",
+      cancelLabel: "İptal",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await signOut();
+    } catch (e) {
+      toast.show(
+        e instanceof Error ? e.message : "Çıkış yapılamadı",
+        "danger",
+      );
+      return;
+    }
+    toast.show("Çıkış yapıldı", "success");
+    router.replace("/(app)/(tabs)");
+  }
 
   const roleLabel: Record<string, string> = {
     customer: "Öğrenci",
@@ -134,23 +158,7 @@ export default function ProfileTab() {
       </View>
 
       <View style={{ marginTop: 8 }}>
-        <Button
-          label="Çıkış Yap"
-          variant="ghost"
-          onPress={() =>
-            Alert.alert("Çıkış", "Hesabınızdan çıkmak istiyor musunuz?", [
-              { text: "İptal", style: "cancel" },
-              {
-                text: "Çıkış",
-                style: "destructive",
-                onPress: async () => {
-                  await signOut();
-                  router.replace("/(auth)/login");
-                },
-              },
-            ])
-          }
-        />
+        <Button label="Çıkış Yap" variant="ghost" onPress={handleSignOut} />
       </View>
     </Screen>
   );
