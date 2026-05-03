@@ -5,6 +5,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Header } from "@/components/ui/Header";
@@ -18,6 +19,13 @@ import { formatDateTR, formatTRY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import type { Booking, Resort } from "@/lib/types";
 
+// Hard cap on the bookings query. The screen used to show an infinite
+// spinner if the request stalled (slow network, dropped websocket,
+// stuck session refresh) — race the supabase call against this timer
+// so the user always lands on either real data, an empty state, or a
+// proper error within 10 seconds.
+const QUERY_TIMEOUT_MS = 10_000;
+
 type Tab = "upcoming" | "past";
 
 export default function BookingsTab() {
@@ -29,21 +37,66 @@ export default function BookingsTab() {
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["bookings", user?.id, user?.role],
     queryFn: async () => {
       if (!user) return [];
       const filter =
         user.role === "instructor" ? "instructor_id" : "customer_id";
-      const { data, error } = await supabase
+      console.log(
+        "[bookings] query start uid=",
+        user.id,
+        "role=",
+        user.role,
+        "filter=",
+        filter,
+      );
+      const t0 = Date.now();
+      // Race the actual query against a 10s timeout. Whichever
+      // settles first wins; on timeout we throw a typed error that
+      // the screen surfaces in its error UI.
+      const queryPromise = supabase
         .from("bookings")
         .select("*, resort:resorts(name, region)")
         .eq(filter, user.id)
         .order("lesson_date", { ascending: false });
-      if (error) throw error;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Sunucu yanıt vermedi (10s). Bağlantını kontrol edip tekrar dene.",
+              ),
+            ),
+          QUERY_TIMEOUT_MS,
+        ),
+      );
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise,
+      ]);
+      const ms = Date.now() - t0;
+      if (error) {
+        console.warn(
+          "[bookings] query failed ms=",
+          ms,
+          "code=",
+          error.code,
+          "msg=",
+          error.message,
+          "details=",
+          error.details,
+          "hint=",
+          error.hint,
+        );
+        throw error;
+      }
+      console.log("[bookings] query ok ms=", ms, "rows=", data?.length ?? 0);
       return data as (Booking & { resort: Pick<Resort, "name" | "region"> })[];
     },
     enabled: !!user,
+    retry: 1,
+    staleTime: 30_000,
   });
 
   const filtered = useMemo(() => {
@@ -108,16 +161,82 @@ export default function BookingsTab() {
 
       {isLoading ? (
         <Loading inline />
+      ) : error ? (
+        // Surface the real error instead of pretending nothing happened.
+        // The console log above carries the supabase error code/details
+        // for debugging; the user gets a friendly Turkish message + retry.
+        <View style={{ alignItems: "center", paddingVertical: 40, gap: 14 }}>
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              backgroundColor: c.muted,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="alert-circle" size={28} color={c.destructive} />
+          </View>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 19,
+              letterSpacing: -0.3,
+              textAlign: "center",
+            }}
+          >
+            Rezervasyonlar yüklenemedi
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 14,
+              textAlign: "center",
+              paddingHorizontal: 32,
+              lineHeight: 21,
+            }}
+          >
+            {error instanceof Error ? error.message : "Bilinmeyen bir hata."}
+          </Text>
+          <View style={{ width: 200 }}>
+            <Button
+              label="Tekrar Dene"
+              variant="secondary"
+              onPress={() => {
+                void refetch();
+              }}
+            />
+          </View>
+        </View>
       ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="calendar"
-          title={tab === "upcoming" ? "Yaklaşan ders yok" : "Geçmiş ders yok"}
-          description={
-            tab === "upcoming"
-              ? "Bir pist seçerek ilk dersini ayarlayabilirsin."
-              : "Tamamlanan derslerin burada listelenir."
-          }
-        />
+        // Role-specific empty copy. Customers get a CTA into discovery;
+        // instructors get a nudge to keep their calendar live (they
+        // can't browse to themselves).
+        user.role === "instructor" ? (
+          <EmptyState
+            icon="calendar"
+            title="Henüz rezervasyonun yok"
+            description="Profilini öne çıkarmak için takvimini güncel tut."
+          />
+        ) : (
+          <View style={{ gap: 14 }}>
+            <EmptyState
+              icon="calendar"
+              title="Henüz rezervasyonun yok"
+              description="Hemen bir eğitmen seç ve kayağa başla! 🎿"
+            />
+            <View style={{ paddingHorizontal: 24 }}>
+              <Button
+                label="Eğitmen Bul"
+                variant="accent"
+                onPress={() => router.push("/(app)/(tabs)")}
+              />
+            </View>
+          </View>
+        )
       ) : (
         <View style={{ gap: 12 }}>
           {filtered.map((b) => (
