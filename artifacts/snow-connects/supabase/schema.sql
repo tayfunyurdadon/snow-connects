@@ -115,10 +115,20 @@ create table if not exists instructor_profiles (
   photo text default '',
   certifications text[] default '{}',
   experience_years integer not null default 0,
-  base_price integer not null default 0, -- kuruş per slot
+  base_price integer not null default 0, -- legacy per-slot kuruş, fallback only
+  price_1_person integer not null default 0,     -- kuruş per person, 1-student lesson
+  price_2_person integer not null default 0,     -- kuruş per person, 2-student lesson
+  price_3_person integer not null default 0,     -- kuruş per person, 3-student lesson
+  price_4_plus_person integer not null default 0, -- kuruş per person, 4+ student lesson
   rating numeric(3,2) default 5.00,
   resort_ids uuid[] not null default '{}'
 );
+
+-- Backfill columns when re-running on an older schema.
+alter table instructor_profiles add column if not exists price_1_person integer not null default 0;
+alter table instructor_profiles add column if not exists price_2_person integer not null default 0;
+alter table instructor_profiles add column if not exists price_3_person integer not null default 0;
+alter table instructor_profiles add column if not exists price_4_plus_person integer not null default 0;
 
 ------------------------------------------------------------
 -- Time slots
@@ -321,13 +331,24 @@ begin
     raise exception 'season closed';
   end if;
 
-  select base_price into v_base from instructor_profiles where user_id = p_instructor;
+  -- Pick per-person rate for the lesson tier. Falls back to the legacy
+  -- flat base_price when a tier column is not yet set, so older profiles
+  -- continue to price correctly until edited.
+  select
+    case
+      when v_student_count >= 4 then coalesce(nullif(price_4_plus_person, 0), base_price)
+      when v_student_count = 3   then coalesce(nullif(price_3_person, 0),     base_price)
+      when v_student_count = 2   then coalesce(nullif(price_2_person, 0),     base_price)
+      else                            coalesce(nullif(price_1_person, 0),     base_price)
+    end
+    into v_base
+    from instructor_profiles where user_id = p_instructor;
   if v_base is null then raise exception 'instructor not found'; end if;
 
   select vat_rate, commission_rate into v_vat_rate, v_commission_rate from app_config where id = 1;
 
-  -- Price is per slot for the lesson (not per student). Group lessons share the rate.
-  v_base_total := v_base * v_slot_count;
+  -- Per-person × students × slots, then VAT on top.
+  v_base_total := v_base * v_student_count * v_slot_count;
   v_vat := round(v_base_total * v_vat_rate)::int;
   v_total := v_base_total + v_vat;
   v_commission := round(v_total * v_commission_rate)::int;

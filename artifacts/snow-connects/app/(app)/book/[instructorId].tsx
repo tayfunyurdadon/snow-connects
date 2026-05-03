@@ -22,6 +22,7 @@ import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateShortTR, formatTRY } from "@/lib/format";
+import { calcBreakdown } from "@/lib/pricing";
 import { isInSeason, isoDate, stripTime } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
@@ -225,11 +226,10 @@ export default function BookScreen() {
     });
   }, [studentCount]);
 
-  const totals = useMemo(() => {
-    const base = (instructor?.base_price ?? 0) * selectedKeys.length;
-    const vat = Math.round(base * 0.2);
-    return { base, vat, total: base + vat };
-  }, [instructor, selectedKeys.length]);
+  const totals = useMemo(
+    () => calcBreakdown(instructor, studentCount, selectedKeys.length),
+    [instructor, studentCount, selectedKeys.length],
+  );
 
   if (isLoading || !instructor || !draftHydrated || !rangeFrom || !rangeTo)
     return <Loading />;
@@ -651,7 +651,16 @@ export default function BookScreen() {
           ))}
 
           <Card>
-            <PriceRow label="Ders ücreti" value={formatTRY(totals.base)} />
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 14,
+                marginBottom: 6,
+              }}
+            >
+              {`${totals.students} kişi × ${totals.slots} saat × ${formatTRY(totals.perPerson)} = ${formatTRY(totals.base)}`}
+            </Text>
             <PriceRow label="KDV (%20)" value={formatTRY(totals.vat)} />
             <View
               style={{

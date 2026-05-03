@@ -11,6 +11,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
 import { formatTRY } from "@/lib/format";
+import { pickTierKurus, withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
@@ -50,7 +51,13 @@ export default function InstructorDetail() {
     );
   }
 
-  const totalPrice = Math.round(data.base_price * 1.2);
+  const tiers = [
+    { count: 1, label: "1 kişilik ders", suffix: "/saat" },
+    { count: 2, label: "2 kişilik ders", suffix: "/kişi" },
+    { count: 3, label: "3 kişilik ders", suffix: "/kişi" },
+    { count: 4, label: "4+ kişilik ders", suffix: "/kişi" },
+  ].map((t) => ({ ...t, price: withVat(pickTierKurus(data, t.count)) }));
+  const headlinePrice = tiers[0].price;
   const initial = (data.user.name || "?").slice(0, 1).toUpperCase();
   const rating = data.rating ?? 5;
 
@@ -111,13 +118,14 @@ export default function InstructorDetail() {
         </View>
       </View>
 
-      {/* PRICE — accent-tinted, given pride of place */}
+      {/* PRICE — tiered per-person rates */}
       <Card tone="soft" padding={18}>
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
+            marginBottom: 14,
           }}
         >
           <View>
@@ -130,7 +138,7 @@ export default function InstructorDetail() {
                 textTransform: "uppercase",
               }}
             >
-              Saatlik ders
+              Ders ücretleri · 50 dk
             </Text>
             <View
               style={{
@@ -144,11 +152,11 @@ export default function InstructorDetail() {
                 style={{
                   color: c.foreground,
                   fontFamily: "Fraunces_700Bold",
-                  fontSize: 32,
+                  fontSize: 30,
                   letterSpacing: -0.8,
                 }}
               >
-                {formatTRY(totalPrice)}
+                {formatTRY(headlinePrice)}
               </Text>
               <Text
                 style={{
@@ -157,7 +165,7 @@ export default function InstructorDetail() {
                   fontSize: 12,
                 }}
               >
-                KDV dahil
+                'den başlayan · KDV dahil
               </Text>
             </View>
           </View>
@@ -171,8 +179,56 @@ export default function InstructorDetail() {
               justifyContent: "center",
             }}
           >
-            <Feather name="zap" size={20} color={c.accentForeground} />
+            <Feather name="users" size={20} color={c.accentForeground} />
           </View>
+        </View>
+
+        <View
+          style={{
+            gap: 8,
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: c.borderSoft,
+          }}
+        >
+          {tiers.map((t) => (
+            <View
+              key={t.count}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+              }}
+            >
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 13,
+                }}
+              >
+                {t.label}
+              </Text>
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 14,
+                }}
+              >
+                {formatTRY(t.price)}
+                <Text
+                  style={{
+                    color: c.mutedForeground,
+                    fontFamily: "Inter_500Medium",
+                    fontSize: 12,
+                  }}
+                >
+                  {t.suffix}
+                </Text>
+              </Text>
+            </View>
+          ))}
         </View>
       </Card>
 

@@ -24,7 +24,15 @@ export interface InstructorProfile {
   photo: string;
   certifications: string[];
   experience_years: number;
+  // Legacy flat per-slot rate. Kept for backward compatibility with
+  // profiles created before tiered pricing. New code reads the four
+  // per-person tier columns below; this is used as a fallback.
   base_price: number;
+  // Per-person, per 50-minute slot pricing in kuruş, by group size.
+  price_1_person: number;
+  price_2_person: number;
+  price_3_person: number;
+  price_4_plus_person: number;
   rating: number;
   resort_ids: string[];
 }

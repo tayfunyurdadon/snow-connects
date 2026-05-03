@@ -12,8 +12,23 @@ import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { fromKurus, toKurus, formatTRY } from "@/lib/format";
+import { withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { InstructorProfile, Resort } from "@/lib/types";
+
+type TierKey = "p1" | "p2" | "p3" | "p4";
+
+const TIERS: {
+  key: TierKey;
+  label: string;
+  hint: string;
+  placeholder: string;
+}[] = [
+  { key: "p1", label: "1 kişilik ders", hint: "kişi başı fiyat (TL)", placeholder: "2500" },
+  { key: "p2", label: "2 kişilik ders", hint: "kişi başı fiyat (TL)", placeholder: "1800" },
+  { key: "p3", label: "3 kişilik ders", hint: "kişi başı fiyat (TL)", placeholder: "1400" },
+  { key: "p4", label: "4 ve üzeri kişilik ders", hint: "kişi başı fiyat (TL)", placeholder: "1100" },
+];
 
 export default function InstructorSetup() {
   const c = useColors();
@@ -23,7 +38,12 @@ export default function InstructorSetup() {
 
   const [bio, setBio] = useState("");
   const [years, setYears] = useState("");
-  const [priceTry, setPriceTry] = useState("");
+  const [tierPrices, setTierPrices] = useState<Record<TierKey, string>>({
+    p1: "",
+    p2: "",
+    p3: "",
+    p4: "",
+  });
   const [certs, setCerts] = useState("");
   const [selectedResorts, setSelectedResorts] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -59,7 +79,18 @@ export default function InstructorSetup() {
     if (!hydrated && profile) {
       setBio(profile.bio ?? "");
       setYears(String(profile.experience_years ?? 0));
-      setPriceTry(String(fromKurus(profile.base_price ?? 0)));
+      // Hydrate from per-tier columns; fall back to the legacy flat
+      // base_price so an instructor who hasn't migrated yet sees their
+      // old rate prefilled in the 1-person field instead of empty inputs.
+      const legacy = profile.base_price ?? 0;
+      const fmt = (k: number, fb: number) =>
+        k > 0 ? String(fromKurus(k)) : fb > 0 ? String(fromKurus(fb)) : "";
+      setTierPrices({
+        p1: fmt(profile.price_1_person ?? 0, legacy),
+        p2: fmt(profile.price_2_person ?? 0, 0),
+        p3: fmt(profile.price_3_person ?? 0, 0),
+        p4: fmt(profile.price_4_plus_person ?? 0, 0),
+      });
       setCerts((profile.certifications ?? []).join(", "));
       setSelectedResorts(profile.resort_ids ?? []);
       setHydrated(true);
@@ -74,12 +105,19 @@ export default function InstructorSetup() {
     );
   }
 
+  function parsePrice(s: string): number {
+    return parseFloat(s.replace(",", ".")) || 0;
+  }
+
   async function save() {
     if (!user) return;
     const yearsNum = parseInt(years) || 0;
-    const priceNum = parseFloat(priceTry.replace(",", ".")) || 0;
-    if (!priceNum) {
-      Alert.alert("Eksik", "Saatlik ücret giriniz.");
+    const p1 = parsePrice(tierPrices.p1);
+    const p2 = parsePrice(tierPrices.p2);
+    const p3 = parsePrice(tierPrices.p3);
+    const p4 = parsePrice(tierPrices.p4);
+    if (!p1 || !p2 || !p3 || !p4) {
+      Alert.alert("Eksik", "Lütfen 4 grup boyutu için de fiyat giriniz.");
       return;
     }
     if (selectedResorts.length === 0) {
@@ -91,7 +129,13 @@ export default function InstructorSetup() {
       user_id: user.id,
       bio,
       experience_years: yearsNum,
-      base_price: toKurus(priceNum),
+      // Keep base_price in sync with the 1-person rate so older clients
+      // / fallbacks still see a sensible value.
+      base_price: toKurus(p1),
+      price_1_person: toKurus(p1),
+      price_2_person: toKurus(p2),
+      price_3_person: toKurus(p3),
+      price_4_plus_person: toKurus(p4),
       certifications: certs
         .split(",")
         .map((s) => s.trim())
@@ -99,20 +143,8 @@ export default function InstructorSetup() {
       resort_ids: selectedResorts,
     };
 
-    console.log("[instructor-setup] starting save", {
-      userId: user.id,
-      role: user.role,
-      payload,
-    });
-
     try {
       const sessionResp = await supabase.auth.getSession();
-      console.log("[instructor-setup] session check", {
-        hasSession: !!sessionResp.data.session,
-        sessionUserId: sessionResp.data.session?.user.id,
-        contextUserId: user.id,
-        match: sessionResp.data.session?.user.id === user.id,
-      });
       if (!sessionResp.data.session) {
         Alert.alert(
           "Oturum yok",
@@ -124,9 +156,6 @@ export default function InstructorSetup() {
       const ensureResp = await supabase.rpc("ensure_my_user", {
         p_name: user.name ?? "",
       });
-      console.log("[instructor-setup] ensure_my_user", {
-        error: ensureResp.error,
-      });
       if (ensureResp.error) {
         const e = ensureResp.error;
         Alert.alert(
@@ -136,10 +165,6 @@ export default function InstructorSetup() {
             "",
             `message: ${e.message ?? "(none)"}`,
             `code: ${e.code ?? "(none)"}`,
-            `details: ${e.details ?? "(none)"}`,
-            `hint: ${e.hint ?? "(none)"}`,
-            "",
-            "Şemanın güncel olduğundan emin olun (supabase/schema.sql).",
           ].join("\n"),
         );
         return;
@@ -162,19 +187,8 @@ export default function InstructorSetup() {
         | Awaited<typeof upsertPromise>
         | never;
 
-      console.log("[instructor-setup] upsert response", {
-        data: result.data,
-        error: result.error,
-      });
-
       if (result.error) {
         const e = result.error;
-        console.warn("[instructor-setup] upsert failed", {
-          message: e.message,
-          code: e.code,
-          details: e.details,
-          hint: e.hint,
-        });
         Alert.alert(
           "Kaydedilemedi",
           [
@@ -194,11 +208,6 @@ export default function InstructorSetup() {
       ]);
     } catch (err) {
       const e = err as Error;
-      console.warn("[instructor-setup] save threw", {
-        name: e.name,
-        message: e.message,
-        stack: e.stack,
-      });
       Alert.alert(
         "Beklenmeyen hata",
         `${e.name ?? "Error"}: ${e.message ?? String(err)}`,
@@ -207,8 +216,6 @@ export default function InstructorSetup() {
       setSaving(false);
     }
   }
-
-  const previewPrice = toKurus(parseFloat(priceTry.replace(",", ".")) || 0);
 
   return (
     <Screen contentStyle={{ gap: 18 }}>
@@ -242,44 +249,103 @@ export default function InstructorSetup() {
           />
         </View>
 
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Input
-              label="Deneyim (yıl)"
-              keyboardType="number-pad"
-              value={years}
-              onChangeText={setYears}
-              placeholder="0"
-            />
-          </View>
-          <View style={{ flex: 1.4 }}>
-            <Input
-              label="Saatlik (TL)"
-              keyboardType="decimal-pad"
-              value={priceTry}
-              onChangeText={setPriceTry}
-              placeholder="800"
-            />
-          </View>
-        </View>
+        <Input
+          label="Deneyim (yıl)"
+          keyboardType="number-pad"
+          value={years}
+          onChangeText={setYears}
+          placeholder="0"
+        />
 
-        {previewPrice ? (
+        {/* TIERED PRICING */}
+        <View style={{ gap: 10, marginTop: 4 }}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 17,
+              letterSpacing: -0.2,
+            }}
+          >
+            Ders ücretleri (kişi başı, 50 dakika)
+          </Text>
+          <View style={{ gap: 10 }}>
+            {TIERS.map((t) => {
+              const value = tierPrices[t.key];
+              const num = parsePrice(value);
+              const withTax = num > 0 ? withVat(toKurus(num)) : 0;
+              return (
+                <View key={t.key} style={{ gap: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flex: 1.4 }}>
+                      <Text
+                        style={{
+                          color: c.foreground,
+                          fontFamily: "Inter_600SemiBold",
+                          fontSize: 14,
+                        }}
+                      >
+                        {t.label}
+                      </Text>
+                      <Text
+                        style={{
+                          color: c.mutedForeground,
+                          fontFamily: "Inter_400Regular",
+                          fontSize: 11,
+                          marginTop: 2,
+                        }}
+                      >
+                        {t.hint}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        keyboardType="decimal-pad"
+                        value={value}
+                        onChangeText={(v) =>
+                          setTierPrices((cur) => ({ ...cur, [t.key]: v }))
+                        }
+                        placeholder={t.placeholder}
+                      />
+                    </View>
+                  </View>
+                  {withTax > 0 ? (
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontFamily: "Inter_500Medium",
+                        fontSize: 11,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Müşteriye gösterilen: {formatTRY(withTax)} / kişi (KDV
+                      dahil)
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
           <Card tone="soft" padding={12}>
             <Text
               style={{
                 color: c.mutedForeground,
-                fontFamily: "Inter_500Medium",
+                fontFamily: "Inter_400Regular",
                 fontSize: 12,
+                lineHeight: 18,
               }}
             >
-              Müşteriye gösterilen:{" "}
-              <Text style={{ color: c.foreground, fontFamily: "Inter_700Bold" }}>
-                {formatTRY(Math.round(previewPrice * 1.2))}
-              </Text>{" "}
-              (KDV dahil)
+              Tüm fiyatlar kişi başı olarak girilir. KDV otomatik eklenir ve
+              müşteriye toplam tutar gösterilir.
             </Text>
           </Card>
-        ) : null}
+        </View>
 
         <Input
           label="Sertifikalar (virgülle ayır)"
@@ -351,8 +417,8 @@ export default function InstructorSetup() {
             lineHeight: 18,
           }}
         >
-          Her dersten %3 platform komisyonu kesilir. Ödemeler ders tarihinden 21
-          iş günü sonra hesabınıza aktarılır.
+          Her dersten %3 platform komisyonu kesilir. Ödemeler ders tarihinden
+          21 iş günü sonra hesabınıza aktarılır.
         </Text>
       </Card>
 

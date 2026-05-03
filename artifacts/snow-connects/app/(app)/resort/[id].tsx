@@ -12,6 +12,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
 import { formatTRY } from "@/lib/format";
+import { pickTierKurus, withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
@@ -103,7 +104,12 @@ function InstructorCard({
 }) {
   const c = useColors();
   const initial = (row.user.name || "?").slice(0, 1).toUpperCase();
-  const customerPrice = Math.round(row.base_price * 1.2);
+  const price1 = withVat(pickTierKurus(row, 1));
+  const price2 = withVat(pickTierKurus(row, 2));
+  // "3+ kişi" represents the rate any group of 3 or more pays. We surface
+  // the 4+ tier (the floor) so customers see the lowest-per-person price
+  // they'll get once their party crosses three.
+  const price3plus = withVat(pickTierKurus(row, 4));
   const rating = row.rating ?? 5;
   return (
     <Card onPress={onPress} padding={18}>
@@ -151,29 +157,35 @@ function InstructorCard({
             >
               {row.user.name || "Eğitmen"}
             </Text>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text
-                style={{
-                  color: c.foreground,
-                  fontFamily: "Fraunces_700Bold",
-                  fontSize: 17,
-                  letterSpacing: -0.3,
-                }}
-              >
-                {formatTRY(customerPrice)}
-              </Text>
-              <Text
-                style={{
-                  color: c.mutedForeground,
-                  fontFamily: "Inter_500Medium",
-                  fontSize: 10,
-                  letterSpacing: 0.3,
-                  textTransform: "uppercase",
-                }}
-              >
-                Saatlik · KDV dahil
-              </Text>
-            </View>
+          </View>
+
+          <View style={{ gap: 2 }}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 12.5,
+                lineHeight: 18,
+              }}
+            >
+              <Text style={{ color: c.mutedForeground }}>1 kişi: </Text>
+              {formatTRY(price1)}/saat
+              <Text style={{ color: c.mutedForeground }}>  ·  2 kişi: </Text>
+              {formatTRY(price2)}/kişi
+              <Text style={{ color: c.mutedForeground }}>  ·  3+ kişi: </Text>
+              {formatTRY(price3plus)}/kişi
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 10,
+                letterSpacing: 0.3,
+                textTransform: "uppercase",
+              }}
+            >
+              KDV dahil
+            </Text>
           </View>
 
           <View
