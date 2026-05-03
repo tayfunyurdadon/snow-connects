@@ -18,6 +18,13 @@ export interface Resort {
   region: string;
 }
 
+export type VerificationStatus =
+  | "pending_documents"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "suspended";
+
 export interface InstructorProfile {
   user_id: string;
   bio: string;
@@ -35,6 +42,58 @@ export interface InstructorProfile {
   price_4_plus_person: number;
   rating: number;
   resort_ids: string[];
+  verification_status: VerificationStatus;
+}
+
+export type CertificateType =
+  | "ISIA Level 1"
+  | "ISIA Level 2"
+  | "ISIA Level 3"
+  | "TKF Kayak Öğretmeni"
+  | "Diğer";
+
+export const CERTIFICATE_TYPES: CertificateType[] = [
+  "ISIA Level 1",
+  "ISIA Level 2",
+  "ISIA Level 3",
+  "TKF Kayak Öğretmeni",
+  "Diğer",
+];
+
+export interface InstructorVerification {
+  user_id: string;
+  cert_type: CertificateType | null;
+  cert_number: string | null;
+  cert_issued_at: string | null;
+  cert_expires_at: string | null;
+  cert_doc_path: string | null;
+  id_front_path: string | null;
+  id_back_path: string | null;
+  tc_kimlik_no: string | null;
+  iban: string | null;
+  iban_holder_name: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  rejection_reason: string | null;
+}
+
+// Row shape returned by the admin_list_verifications RPC.
+export interface VerificationListRow {
+  user_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  resort_ids: string[] | null;
+  verification_status: VerificationStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  cert_type: CertificateType | null;
+  cert_doc_path: string | null;
+  id_front_path: string | null;
+  id_back_path: string | null;
+  photo: string | null;
 }
 
 export interface InstructorWithUser extends InstructorProfile {

@@ -205,7 +205,9 @@ export default function RegisterScreen() {
 }
 
 function resolveTarget(next: string | undefined, role: UserRole): string {
-  if (role === "instructor") return "/(app)/instructor-panel/setup";
+  // New instructors land on the verification flow first — they can't
+  // accept bookings until an admin approves their documents.
+  if (role === "instructor") return "/(app)/instructor-panel/verification";
   if (next) return next;
   return "/(app)/(tabs)";
 }

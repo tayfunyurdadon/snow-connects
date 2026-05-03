@@ -9,6 +9,7 @@ import { Loading } from "@/components/ui/Loading";
 import { MonthCalendar } from "@/components/ui/MonthCalendar";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { VerificationBanner } from "@/components/VerificationBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR } from "@/lib/format";
@@ -69,6 +70,7 @@ export default function InstructorCalendar() {
 
   return (
     <Screen contentStyle={{ gap: 18 }}>
+      <VerificationBanner />
       <Card padding={14}>
         <MonthCalendar value={date} onChange={setDate} seasonGate />
       </Card>

@@ -27,6 +27,9 @@ export default function InstructorDetail() {
         .from("instructor_profiles")
         .select("*, user:users!inner(id, name, email)")
         .eq("user_id", id)
+        // Defense-in-depth: even if the URL is shared, customers can never
+        // open the detail page for a non-approved instructor.
+        .eq("verification_status", "approved")
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;

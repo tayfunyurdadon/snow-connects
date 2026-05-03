@@ -9,6 +9,7 @@ import { Header } from "@/components/ui/Header";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { Screen } from "@/components/ui/Screen";
+import { VerificationBanner } from "@/components/VerificationBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { fromKurus, toKurus, formatTRY } from "@/lib/format";
@@ -219,6 +220,7 @@ export default function InstructorSetup() {
 
   return (
     <Screen contentStyle={{ gap: 18 }}>
+      <VerificationBanner />
       <Header
         eyebrow="Profil Kurulumu"
         title="Vitrinin"

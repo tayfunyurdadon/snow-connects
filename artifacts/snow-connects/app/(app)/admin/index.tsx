@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useRouter } from "expo-router";
+
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Loading } from "@/components/ui/Loading";
@@ -11,14 +13,38 @@ import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import type { AppUser, Message } from "@/lib/types";
+import type {
+  AppUser,
+  Message,
+  VerificationListRow,
+  VerificationStatus,
+} from "@/lib/types";
+import { VERIFICATION_LABELS } from "@/lib/verification";
 
-type Tab = "instructors" | "flagged" | "bookings";
+type Tab = "verifications" | "instructors" | "flagged" | "bookings";
+type VerifSubTab = Extract<
+  VerificationStatus,
+  "pending_review" | "approved" | "rejected"
+>;
 
 export default function AdminPanel() {
   const c = useColors();
   const qc = useQueryClient();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("instructors");
+  const [verifSub, setVerifSub] = useState<VerifSubTab>("pending_review");
+
+  const { data: verifs, isLoading: loadingVerif } = useQuery({
+    queryKey: ["admin-verifications", verifSub],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_list_verifications", {
+        p_status: verifSub,
+      });
+      if (error) throw error;
+      return (data ?? []) as VerificationListRow[];
+    },
+    enabled: tab === "verifications",
+  });
 
   const { data: instructors, isLoading: loadingInstr } = useQuery({
     queryKey: ["admin-instructors"],
@@ -85,6 +111,7 @@ export default function AdminPanel() {
             { id: "instructors", label: "Eğitmenler" },
             { id: "flagged", label: "Bildirilen" },
             { id: "bookings", label: "Rezervasyon" },
+            { id: "verifications", label: "Onaylar" },
           ] as { id: Tab; label: string }[]
         ).map((t) => {
           const active = tab === t.id;
@@ -113,6 +140,137 @@ export default function AdminPanel() {
           );
         })}
       </View>
+
+      {tab === "verifications" && (
+        <>
+          <View
+            style={[
+              styles.tabRow,
+              { backgroundColor: c.secondary, borderRadius: c.radius },
+            ]}
+          >
+            {(
+              [
+                { id: "pending_review", label: "Bekleyen" },
+                { id: "approved", label: "Onaylı" },
+                { id: "rejected", label: "Reddedilen" },
+              ] as { id: VerifSubTab; label: string }[]
+            ).map((t) => {
+              const active = verifSub === t.id;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => setVerifSub(t.id)}
+                  style={[
+                    styles.tabBtn,
+                    {
+                      backgroundColor: active ? c.card : "transparent",
+                      borderRadius: c.radius - 4,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: active ? c.primary : c.mutedForeground,
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 12,
+                    }}
+                  >
+                    {t.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {loadingVerif ? (
+            <Loading inline />
+          ) : !verifs || verifs.length === 0 ? (
+            <EmptyState
+              icon="check-circle"
+              title="Bu listede başvuru yok"
+              description={
+                verifSub === "pending_review"
+                  ? "Yeni başvurular burada gözükecek."
+                  : ""
+              }
+            />
+          ) : (
+            verifs.map((row) => {
+              const meta = VERIFICATION_LABELS[row.verification_status];
+              return (
+                <Card
+                  key={row.user_id}
+                  onPress={() =>
+                    router.push(`/(app)/admin/verification/${row.user_id}`)
+                  }
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text
+                        style={{
+                          color: c.foreground,
+                          fontFamily: "Inter_600SemiBold",
+                          fontSize: 14,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {row.name || "İsimsiz"}
+                      </Text>
+                      <Text
+                        style={{
+                          color: c.mutedForeground,
+                          fontSize: 12,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {row.email ?? "—"}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          gap: 6,
+                          marginTop: 4,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <Pill
+                          label={meta.label}
+                          tone={
+                            meta.tone === "default" ? "warning" : meta.tone
+                          }
+                        />
+                        {row.cert_type ? (
+                          <Pill label={row.cert_type} tone="default" />
+                        ) : null}
+                        {row.submitted_at ? (
+                          <Pill
+                            label={new Date(
+                              row.submitted_at,
+                            ).toLocaleDateString("tr-TR")}
+                            tone="default"
+                          />
+                        ) : null}
+                      </View>
+                    </View>
+                    <Feather
+                      name="chevron-right"
+                      size={18}
+                      color={c.mutedForeground}
+                    />
+                  </View>
+                </Card>
+              );
+            })
+          )}
+        </>
+      )}
 
       {tab === "instructors" && (
         <>

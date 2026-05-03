@@ -44,6 +44,13 @@ begin
     v_role
   )
   on conflict (id) do nothing;
+  -- Pre-create the instructor profile row in 'pending_documents' so the
+  -- verification flow has a row to read/update from the moment they sign up.
+  if v_role = 'instructor' then
+    insert into public.instructor_profiles (user_id, verification_status)
+      values (new.id, 'pending_documents')
+      on conflict (user_id) do nothing;
+  end if;
   return new;
 end;
 $$;
@@ -82,6 +89,11 @@ begin
   insert into public.users (id, email, name, role)
     values (v_uid, v_email, v_name, v_role)
     on conflict (id) do nothing;
+  if v_role = 'instructor' then
+    insert into public.instructor_profiles (user_id, verification_status)
+      values (v_uid, 'pending_documents')
+      on conflict (user_id) do nothing;
+  end if;
 end;
 $$;
 
@@ -121,7 +133,15 @@ create table if not exists instructor_profiles (
   price_3_person integer not null default 0,     -- kuruş per person, 3-student lesson
   price_4_plus_person integer not null default 0, -- kuruş per person, 4+ student lesson
   rating numeric(3,2) default 5.00,
-  resort_ids uuid[] not null default '{}'
+  resort_ids uuid[] not null default '{}',
+  -- Verification gate. Customers can only see and book 'approved' instructors.
+  -- pending_documents → just signed up, hasn't uploaded yet
+  -- pending_review    → docs uploaded, waiting for admin
+  -- approved          → verified, can receive bookings
+  -- rejected          → admin rejected, must re-submit
+  -- suspended         → temporarily disabled by admin
+  verification_status text not null default 'pending_documents'
+    check (verification_status in ('pending_documents','pending_review','approved','rejected','suspended'))
 );
 
 -- Backfill columns when re-running on an older schema.
@@ -129,6 +149,64 @@ alter table instructor_profiles add column if not exists price_1_person integer 
 alter table instructor_profiles add column if not exists price_2_person integer not null default 0;
 alter table instructor_profiles add column if not exists price_3_person integer not null default 0;
 alter table instructor_profiles add column if not exists price_4_plus_person integer not null default 0;
+alter table instructor_profiles add column if not exists verification_status text not null default 'pending_documents'
+  check (verification_status in ('pending_documents','pending_review','approved','rejected','suspended'));
+
+-- Existing rows from before the verification system existed: grandfather them
+-- as approved so currently-active instructors are not unintentionally hidden.
+update instructor_profiles
+  set verification_status = 'approved'
+  where verification_status = 'pending_documents'
+    and (bio <> '' or base_price > 0 or price_1_person > 0 or array_length(resort_ids, 1) > 0);
+
+------------------------------------------------------------
+-- Instructor verification (sensitive PII; separate table so we can
+-- enforce strict RLS that never exposes TC Kimlik / IBAN to the public).
+------------------------------------------------------------
+create table if not exists instructor_verification (
+  user_id uuid primary key references users(id) on delete cascade,
+  -- Certificate
+  cert_type text,                -- ISIA Level 1/2/3, TKF, Diğer
+  cert_number text,
+  cert_issued_at date,
+  cert_expires_at date,
+  cert_doc_path text,            -- storage key in 'instructor-docs' bucket
+  -- ID
+  id_front_path text,
+  id_back_path text,
+  tc_kimlik_no text,
+  -- Banking
+  iban text,
+  iban_holder_name text,
+  -- Review trail
+  submitted_at timestamptz,
+  reviewed_at timestamptz,
+  reviewed_by uuid references users(id),
+  rejection_reason text
+);
+
+------------------------------------------------------------
+-- Notification outbox (consumed by an external worker / Edge Function
+-- that delivers transactional email; we just enqueue the events here).
+------------------------------------------------------------
+create table if not exists notification_outbox (
+  id uuid primary key default uuid_generate_v4(),
+  recipient_user_id uuid not null references users(id) on delete cascade,
+  kind text not null,
+  payload jsonb not null default '{}',
+  status text not null default 'pending' check (status in ('pending','sent','failed')),
+  created_at timestamptz not null default now(),
+  sent_at timestamptz,
+  error text
+);
+create index if not exists idx_outbox_pending on notification_outbox(status, created_at) where status = 'pending';
+
+------------------------------------------------------------
+-- Storage bucket for instructor verification documents (private).
+------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+  values ('instructor-docs', 'instructor-docs', false)
+  on conflict (id) do nothing;
 
 ------------------------------------------------------------
 -- Time slots
@@ -331,6 +409,17 @@ begin
     raise exception 'season closed';
   end if;
 
+  -- Verification gate: only approved instructors can receive bookings.
+  -- We block at the RPC layer in addition to the RLS-based listing filter
+  -- so a stale/forged client cannot attempt to book an unverified instructor.
+  declare v_verif text;
+  begin
+    select verification_status into v_verif from instructor_profiles where user_id = p_instructor;
+    if v_verif is distinct from 'approved' then
+      raise exception 'instructor not verified';
+    end if;
+  end;
+
   -- Pick per-person rate for the lesson tier. Falls back to the legacy
   -- flat base_price when a tier column is not yet set, so older profiles
   -- continue to price correctly until edited.
@@ -498,10 +587,71 @@ create policy "users_public_instructors" on users for select using (role = 'inst
 drop policy if exists "users_self_update" on users;
 create policy "users_self_update" on users for update using (auth.uid() = id) with check (auth.uid() = id);
 
+-- Public can only see approved instructor profiles. Owner reads/writes their
+-- own row via the owner policy below. Admin sees all via the admin policy.
 drop policy if exists "ip_read" on instructor_profiles;
-create policy "ip_read" on instructor_profiles for select using (true);
+drop policy if exists "ip_read_approved" on instructor_profiles;
+create policy "ip_read_approved" on instructor_profiles for select using (
+  verification_status = 'approved'
+);
 drop policy if exists "ip_owner_write" on instructor_profiles;
 create policy "ip_owner_write" on instructor_profiles for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "ip_admin_all" on instructor_profiles;
+create policy "ip_admin_all" on instructor_profiles for all using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+) with check (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+
+------------------------------------------------------------
+-- RLS for verification + notification + storage
+------------------------------------------------------------
+alter table instructor_verification enable row level security;
+drop policy if exists "iv_owner_read" on instructor_verification;
+create policy "iv_owner_read" on instructor_verification for select using (auth.uid() = user_id);
+drop policy if exists "iv_admin_read" on instructor_verification;
+create policy "iv_admin_read" on instructor_verification for select using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+-- All writes go through SECURITY DEFINER RPCs (submit / approve / reject).
+drop policy if exists "iv_no_direct_write" on instructor_verification;
+create policy "iv_no_direct_write" on instructor_verification for insert with check (false);
+drop policy if exists "iv_no_direct_update" on instructor_verification;
+create policy "iv_no_direct_update" on instructor_verification for update using (false);
+
+alter table notification_outbox enable row level security;
+drop policy if exists "outbox_admin_read" on notification_outbox;
+create policy "outbox_admin_read" on notification_outbox for select using (
+  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+);
+drop policy if exists "outbox_no_direct_write" on notification_outbox;
+create policy "outbox_no_direct_write" on notification_outbox for insert with check (false);
+
+-- Storage object policies: each instructor's docs live under '<user_id>/...'
+-- in the 'instructor-docs' bucket. Only that user and admins can read/write.
+drop policy if exists "instructor_docs_owner_read" on storage.objects;
+create policy "instructor_docs_owner_read" on storage.objects for select to authenticated using (
+  bucket_id = 'instructor-docs'
+  and (
+    (storage.foldername(name))[1] = auth.uid()::text
+    or exists (select 1 from public.users where id = auth.uid() and role = 'admin')
+  )
+);
+drop policy if exists "instructor_docs_owner_write" on storage.objects;
+create policy "instructor_docs_owner_write" on storage.objects for insert to authenticated with check (
+  bucket_id = 'instructor-docs'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+drop policy if exists "instructor_docs_owner_update" on storage.objects;
+create policy "instructor_docs_owner_update" on storage.objects for update to authenticated using (
+  bucket_id = 'instructor-docs'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+drop policy if exists "instructor_docs_owner_delete" on storage.objects;
+create policy "instructor_docs_owner_delete" on storage.objects for delete to authenticated using (
+  bucket_id = 'instructor-docs'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
 
 drop policy if exists "slots_read" on time_slots;
 create policy "slots_read" on time_slots for select using (true);
@@ -544,3 +694,182 @@ do $$ begin
     alter publication supabase_realtime add table messages;
   end if;
 end $$;
+
+------------------------------------------------------------
+-- Verification RPCs
+------------------------------------------------------------
+-- Instructor submits their verification packet. Client uploads documents
+-- to the 'instructor-docs' storage bucket FIRST (so the storage paths exist
+-- and are owned by them per RLS), then calls this RPC with the metadata.
+create or replace function submit_instructor_verification(
+  p_cert_type text,
+  p_cert_number text,
+  p_cert_issued date,
+  p_cert_expires date,
+  p_cert_doc_path text,
+  p_id_front_path text,
+  p_id_back_path text,
+  p_tc_kimlik text,
+  p_photo_path text,
+  p_iban text,
+  p_iban_holder text
+) returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_role text;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  select role into v_role from public.users where id = v_uid;
+  if v_role is distinct from 'instructor' then raise exception 'instructors only'; end if;
+
+  -- Light validation; UI does richer checks but we double-check at the boundary.
+  if coalesce(trim(p_cert_type), '') = '' then raise exception 'cert_type required'; end if;
+  if coalesce(trim(p_cert_number), '') = '' then raise exception 'cert_number required'; end if;
+  if p_cert_issued is null then raise exception 'cert_issued required'; end if;
+  if coalesce(trim(p_cert_doc_path), '') = '' then raise exception 'cert document required'; end if;
+  if coalesce(trim(p_id_front_path), '') = '' then raise exception 'id front required'; end if;
+  if coalesce(trim(p_id_back_path), '') = '' then raise exception 'id back required'; end if;
+  if coalesce(trim(p_photo_path), '') = '' then raise exception 'profile photo required'; end if;
+  -- Defense-in-depth: storage RLS already prevents an instructor from
+  -- writing to anyone else's folder, but this RPC is SECURITY DEFINER, so
+  -- the caller could otherwise pass a spoofed path to a victim's document.
+  -- Enforce that every submitted path begins with the caller's user_id.
+  if p_cert_doc_path  not like (v_uid::text || '/%')
+     or p_id_front_path not like (v_uid::text || '/%')
+     or p_id_back_path  not like (v_uid::text || '/%')
+     or p_photo_path    not like (v_uid::text || '/%') then
+    raise exception 'document path ownership mismatch';
+  end if;
+  if regexp_replace(coalesce(p_tc_kimlik, ''), '\D', '', 'g') !~ '^\d{11}$' then
+    raise exception 'invalid tc_kimlik';
+  end if;
+  if upper(replace(coalesce(p_iban, ''), ' ', '')) !~ '^TR\d{24}$' then
+    raise exception 'invalid iban';
+  end if;
+  if coalesce(trim(p_iban_holder), '') = '' then raise exception 'iban_holder required'; end if;
+
+  -- Make sure the profile + verification rows exist (handle_new_user normally
+  -- creates the profile row, but ensure for safety).
+  insert into public.instructor_profiles (user_id, verification_status)
+    values (v_uid, 'pending_documents') on conflict (user_id) do nothing;
+  insert into public.instructor_verification (user_id) values (v_uid)
+    on conflict (user_id) do nothing;
+
+  update public.instructor_verification set
+    cert_type = p_cert_type,
+    cert_number = p_cert_number,
+    cert_issued_at = p_cert_issued,
+    cert_expires_at = p_cert_expires,
+    cert_doc_path = p_cert_doc_path,
+    id_front_path = p_id_front_path,
+    id_back_path = p_id_back_path,
+    tc_kimlik_no = regexp_replace(p_tc_kimlik, '\D', '', 'g'),
+    iban = upper(replace(p_iban, ' ', '')),
+    iban_holder_name = p_iban_holder,
+    submitted_at = now(),
+    rejection_reason = null
+  where user_id = v_uid;
+
+  update public.instructor_profiles set
+    verification_status = 'pending_review',
+    photo = p_photo_path
+  where user_id = v_uid;
+
+  insert into public.notification_outbox (recipient_user_id, kind, payload)
+    values (v_uid, 'verification_submitted', '{}'::jsonb);
+end;
+$$;
+grant execute on function submit_instructor_verification(text,text,date,date,text,text,text,text,text,text,text) to authenticated;
+
+create or replace function admin_approve_instructor(p_user uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_admin uuid := auth.uid();
+  v_current text;
+begin
+  if v_admin is null then raise exception 'not authenticated'; end if;
+  if not exists(select 1 from public.users where id = v_admin and role = 'admin') then
+    raise exception 'admins only';
+  end if;
+  -- Only allow approving from a state where review has actually happened.
+  -- Avoids accidental approval of a profile that hasn't uploaded anything yet.
+  select verification_status into v_current from public.instructor_profiles where user_id = p_user;
+  if v_current is null then raise exception 'instructor not found'; end if;
+  if v_current not in ('pending_review','rejected','suspended') then
+    raise exception 'cannot approve from status %', v_current;
+  end if;
+  update public.instructor_profiles
+     set verification_status = 'approved'
+   where user_id = p_user;
+  update public.instructor_verification
+     set reviewed_at = now(), reviewed_by = v_admin, rejection_reason = null
+   where user_id = p_user;
+  insert into public.notification_outbox (recipient_user_id, kind, payload)
+    values (p_user, 'verification_approved', '{}'::jsonb);
+end;
+$$;
+grant execute on function admin_approve_instructor(uuid) to authenticated;
+
+create or replace function admin_reject_instructor(p_user uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_admin uuid := auth.uid();
+  v_current text;
+begin
+  if v_admin is null then raise exception 'not authenticated'; end if;
+  if not exists(select 1 from public.users where id = v_admin and role = 'admin') then
+    raise exception 'admins only';
+  end if;
+  if coalesce(trim(p_reason), '') = '' then raise exception 'reason required'; end if;
+  select verification_status into v_current from public.instructor_profiles where user_id = p_user;
+  if v_current is null then raise exception 'instructor not found'; end if;
+  if v_current not in ('pending_review','approved') then
+    raise exception 'cannot reject from status %', v_current;
+  end if;
+  update public.instructor_profiles
+     set verification_status = 'rejected'
+   where user_id = p_user;
+  update public.instructor_verification
+     set reviewed_at = now(), reviewed_by = v_admin, rejection_reason = p_reason
+   where user_id = p_user;
+  insert into public.notification_outbox (recipient_user_id, kind, payload)
+    values (p_user, 'verification_rejected', jsonb_build_object('reason', p_reason));
+end;
+$$;
+grant execute on function admin_reject_instructor(uuid, text) to authenticated;
+
+-- Returns a list of verification applications visible to the current admin,
+-- with the joined user info. Avoids client-side multi-table joins.
+create or replace function admin_list_verifications(p_status text)
+returns table (
+  user_id uuid,
+  name text,
+  email text,
+  phone text,
+  resort_ids uuid[],
+  verification_status text,
+  submitted_at timestamptz,
+  reviewed_at timestamptz,
+  rejection_reason text,
+  cert_type text,
+  cert_doc_path text,
+  id_front_path text,
+  id_back_path text,
+  photo text
+) language plpgsql security definer set search_path = public as $$
+begin
+  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
+    raise exception 'admins only';
+  end if;
+  return query
+    select u.id, u.name, u.email, u.phone, p.resort_ids, p.verification_status,
+           v.submitted_at, v.reviewed_at, v.rejection_reason,
+           v.cert_type, v.cert_doc_path, v.id_front_path, v.id_back_path, p.photo
+      from public.instructor_profiles p
+      join public.users u on u.id = p.user_id
+      left join public.instructor_verification v on v.user_id = p.user_id
+     where (p_status is null or p_status = '' or p.verification_status = p_status)
+     order by coalesce(v.submitted_at, u.created_at) desc;
+end;
+$$;
+grant execute on function admin_list_verifications(text) to authenticated;

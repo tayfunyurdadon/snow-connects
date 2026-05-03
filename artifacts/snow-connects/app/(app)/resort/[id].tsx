@@ -42,7 +42,11 @@ export default function ResortInstructors() {
       const { data, error } = await supabase
         .from("instructor_profiles")
         .select("*, user:users!inner(id, name, status, role)")
-        .contains("resort_ids", [id]);
+        .contains("resort_ids", [id])
+        // Only verified instructors are bookable. RLS already hides
+        // unapproved profiles from non-owners, but we filter explicitly so
+        // an instructor browsing their own resort doesn't see themselves.
+        .eq("verification_status", "approved");
       if (error) throw error;
       return ((data ?? []) as (Row & { user: AppUser })[])
         .filter(
