@@ -7,66 +7,56 @@ alter table app_config add column if not exists season_end_month   smallint not 
 alter table app_config add column if not exists season_end_day     smallint not null default 15;
 
 ------------------------------------------------------------
+-- Admin check helper.
+-- MUST be SECURITY DEFINER so it can read public.users without being
+-- subject to RLS. Otherwise referencing public.users from a policy ON
+-- public.users causes "infinite recursion detected in policy" (42P17).
+------------------------------------------------------------
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.users where id = auth.uid() and role = 'admin'
+  );
+$$;
+grant execute on function public.is_admin() to authenticated, anon;
+
+------------------------------------------------------------
 -- Admin RLS: read-all on user-scoped tables, write on resorts/config.
 -- Each policy is additive ("OR admin") so it does not weaken existing
--- per-user policies for non-admin callers.
+-- per-user policies for non-admin callers. All checks go through
+-- public.is_admin() to avoid RLS recursion on the users table.
 ------------------------------------------------------------
 drop policy if exists "users_admin_read"   on users;
-create policy "users_admin_read"   on users for select using (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-);
+create policy "users_admin_read"   on users for select using ( public.is_admin() );
 drop policy if exists "users_admin_update" on users;
-create policy "users_admin_update" on users for update using (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-) with check (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-);
+create policy "users_admin_update" on users for update using ( public.is_admin() ) with check ( public.is_admin() );
 
 drop policy if exists "bookings_admin_read" on bookings;
-create policy "bookings_admin_read" on bookings for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "bookings_admin_read" on bookings for select using ( public.is_admin() );
 
 drop policy if exists "payouts_admin_read"  on payouts;
-create policy "payouts_admin_read"  on payouts for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "payouts_admin_read"  on payouts for select using ( public.is_admin() );
 drop policy if exists "payouts_admin_update" on payouts;
-create policy "payouts_admin_update" on payouts for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "payouts_admin_update" on payouts for update using ( public.is_admin() ) with check ( public.is_admin() );
 
 drop policy if exists "messages_admin_read" on messages;
-create policy "messages_admin_read" on messages for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "messages_admin_read" on messages for select using ( public.is_admin() );
 drop policy if exists "messages_admin_update" on messages;
-create policy "messages_admin_update" on messages for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "messages_admin_update" on messages for update using ( public.is_admin() ) with check ( public.is_admin() );
 
 drop policy if exists "students_admin_read" on students;
-create policy "students_admin_read" on students for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "students_admin_read" on students for select using ( public.is_admin() );
 
 drop policy if exists "resorts_admin_write" on resorts;
-create policy "resorts_admin_write" on resorts for all using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "resorts_admin_write" on resorts for all using ( public.is_admin() ) with check ( public.is_admin() );
 
 drop policy if exists "config_admin_write" on app_config;
-create policy "config_admin_write" on app_config for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "config_admin_write" on app_config for update using ( public.is_admin() ) with check ( public.is_admin() );
 
 ------------------------------------------------------------
 -- Admin RPCs
@@ -87,9 +77,7 @@ declare
   v_flagged_messages    int;
   v_total_resorts       int;
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
 
   select count(*) into v_total_users     from public.users;
   select count(*) into v_total_customers from public.users where role = 'customer';
@@ -121,9 +109,7 @@ grant execute on function admin_stats() to authenticated;
 create or replace function admin_set_user_status(p_user uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   if p_status not in ('active','blocked','pending') then
     raise exception 'invalid status';
   end if;
@@ -138,9 +124,7 @@ grant execute on function admin_set_user_status(uuid, text) to authenticated;
 create or replace function admin_release_payout(p_payout uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   update public.payouts
      set status = 'released', release_date = now()::date
    where id = p_payout and status = 'pending';
@@ -151,9 +135,7 @@ grant execute on function admin_release_payout(uuid) to authenticated;
 create or replace function admin_resolve_flag(p_message uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   update public.messages
      set flagged = false, flag_reason = null
    where id = p_message;
@@ -165,9 +147,7 @@ create or replace function admin_upsert_resort(p_id uuid, p_name text, p_region 
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   if coalesce(trim(p_name),'') = '' or coalesce(trim(p_region),'') = '' then
     raise exception 'name and region required';
   end if;
@@ -186,9 +166,7 @@ grant execute on function admin_upsert_resort(uuid, text, text) to authenticated
 create or replace function admin_delete_resort(p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   delete from public.resorts where id = p_id;
 end;
 $$;
@@ -203,9 +181,7 @@ create or replace function admin_update_config(
   p_season_end_day smallint
 ) returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
-    raise exception 'admins only';
-  end if;
+  if not public.is_admin() then raise exception 'admins only'; end if;
   if p_vat_rate < 0 or p_vat_rate > 1 then raise exception 'vat_rate out of range'; end if;
   if p_commission_rate < 0 or p_commission_rate > 1 then raise exception 'commission_rate out of range'; end if;
   if p_season_start_month not between 1 and 12 or p_season_end_month not between 1 and 12 then
@@ -225,8 +201,6 @@ begin
 end;
 $$;
 grant execute on function admin_update_config(numeric, numeric, smallint, smallint, smallint, smallint) to authenticated;
-
-------------------------------------------------------------
 
 ------------------------------------------------------------
 -- Patch: create_booking now reads season window from app_config

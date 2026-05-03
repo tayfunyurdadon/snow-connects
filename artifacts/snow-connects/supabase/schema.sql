@@ -884,66 +884,56 @@ alter table app_config add column if not exists season_end_month   smallint not 
 alter table app_config add column if not exists season_end_day     smallint not null default 15;
 
 ------------------------------------------------------------
+-- Admin check helper. MUST be SECURITY DEFINER so it can read public.users
+-- without being subject to RLS — otherwise an admin policy ON public.users
+-- that references public.users causes 42P17 "infinite recursion detected
+-- in policy".
+------------------------------------------------------------
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.users where id = auth.uid() and role = 'admin'
+  );
+$$;
+grant execute on function public.is_admin() to authenticated, anon;
+
+------------------------------------------------------------
 -- Admin RLS: read-all on user-scoped tables, write on resorts/config.
 -- Each policy is additive ("OR admin") so it does not weaken existing
--- per-user policies for non-admin callers.
+-- per-user policies for non-admin callers. All checks go through
+-- public.is_admin() to avoid RLS recursion on the users table.
 ------------------------------------------------------------
-drop policy if exists "users_admin_read"   on users;
-create policy "users_admin_read"   on users for select using (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-);
-drop policy if exists "users_admin_update" on users;
-create policy "users_admin_update" on users for update using (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-) with check (
-  exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin')
-);
+drop policy if exists "users_admin_read"     on users;
+create policy "users_admin_read"     on users     for select using ( public.is_admin() );
+drop policy if exists "users_admin_update"   on users;
+create policy "users_admin_update"   on users     for update using ( public.is_admin() ) with check ( public.is_admin() );
 
-drop policy if exists "bookings_admin_read" on bookings;
-create policy "bookings_admin_read" on bookings for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "bookings_admin_read"  on bookings;
+create policy "bookings_admin_read"  on bookings  for select using ( public.is_admin() );
 
-drop policy if exists "payouts_admin_read"  on payouts;
-create policy "payouts_admin_read"  on payouts for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "payouts_admin_read"   on payouts;
+create policy "payouts_admin_read"   on payouts   for select using ( public.is_admin() );
 drop policy if exists "payouts_admin_update" on payouts;
-create policy "payouts_admin_update" on payouts for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "payouts_admin_update" on payouts   for update using ( public.is_admin() ) with check ( public.is_admin() );
 
-drop policy if exists "messages_admin_read" on messages;
-create policy "messages_admin_read" on messages for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "messages_admin_read"  on messages;
+create policy "messages_admin_read"  on messages  for select using ( public.is_admin() );
 drop policy if exists "messages_admin_update" on messages;
-create policy "messages_admin_update" on messages for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+create policy "messages_admin_update" on messages for update using ( public.is_admin() ) with check ( public.is_admin() );
 
-drop policy if exists "students_admin_read" on students;
-create policy "students_admin_read" on students for select using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "students_admin_read"  on students;
+create policy "students_admin_read"  on students  for select using ( public.is_admin() );
 
-drop policy if exists "resorts_admin_write" on resorts;
-create policy "resorts_admin_write" on resorts for all using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "resorts_admin_write"  on resorts;
+create policy "resorts_admin_write"  on resorts  for all    using ( public.is_admin() ) with check ( public.is_admin() );
 
-drop policy if exists "config_admin_write" on app_config;
-create policy "config_admin_write" on app_config for update using (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-) with check (
-  exists (select 1 from public.users where id = auth.uid() and role = 'admin')
-);
+drop policy if exists "config_admin_write"   on app_config;
+create policy "config_admin_write"   on app_config for update using ( public.is_admin() ) with check ( public.is_admin() );
 
 ------------------------------------------------------------
 -- Admin RPCs
