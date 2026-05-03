@@ -137,6 +137,9 @@ export default function LoginScreen() {
 }
 
 function resolveTarget(next: string | undefined, role: string | undefined): string {
+  // Admins always land on the admin panel — never the customer app, even if a
+  // `next` redirect param is set, since they don't have customer flows.
+  if (role === "admin") return "/(admin)/(tabs)";
   if (next) return next;
   return "/(app)/(tabs)";
 }

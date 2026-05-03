@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import React from "react";
 
 import { Loading } from "@/components/ui/Loading";
@@ -6,12 +6,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function AppLayout() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const c = useColors();
 
   // Guest browsing is allowed. Individual screens (booking, payment, chat,
   // panels) gate on session themselves.
   if (loading) return <Loading />;
+  // Admins should never see customer/instructor surfaces — bounce them to
+  // their own area. The (admin) layout enforces the same gate from its side.
+  if (user?.role === "admin") return <Redirect href="/(admin)/(tabs)" />;
 
   return (
     <Stack
@@ -59,11 +62,6 @@ export default function AppLayout() {
       <Stack.Screen
         name="instructor-panel/verification/index"
         options={{ title: "Eğitmenlik Başvurusu" }}
-      />
-      <Stack.Screen name="admin/index" options={{ title: "Yönetici Paneli" }} />
-      <Stack.Screen
-        name="admin/verification/[id]"
-        options={{ title: "Başvuru İncelemesi" }}
       />
       <Stack.Screen name="support" options={{ title: "Yardım & Destek" }} />
     </Stack>

@@ -145,7 +145,7 @@ export default function ProfileTab() {
             icon="shield"
             label="Yönetici Paneli"
             hint="Eğitmenler, rezervasyonlar, bildirimler"
-            onPress={() => router.push("/(app)/admin")}
+            onPress={() => router.push("/(admin)/(tabs)")}
           />
         ) : null}
 

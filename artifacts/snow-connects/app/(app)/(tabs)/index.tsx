@@ -601,7 +601,7 @@ function AdminHome() {
         />
       </View>
 
-      <Card onPress={() => router.push("/(app)/admin")}>
+      <Card onPress={() => router.push("/(admin)/(tabs)")}>
         <View style={styles.row}>
           <View
             style={{

@@ -128,6 +128,56 @@ artifacts/snow-connects/
 └── supabase/schema.sql        # One-time DB setup
 ```
 
+### Admin panel (`app/(admin)/`)
+
+Dedicated route group for `role='admin'` users, parallel to `(app)` and
+`(auth)`. Distinct dark theme via `lib/adminTheme.ts` and admin-only
+primitives in `components/admin/AdminUI.tsx` (admin screens never use the
+warm customer Card/Pill/Header components — except the verification detail
+screen, which still uses the customer chrome and is a known visual
+inconsistency).
+
+Five bottom tabs grouping the nine sections:
+
+| Tab | File | Sections |
+|---|---|---|
+| Pano | `(tabs)/index.tsx` | Stats dashboard (revenue, payouts, queue, bayraklar, users, resorts) |
+| Onaylar | `(tabs)/approvals.tsx` | Eğitmen onay kuyruğu (pending/approved/rejected sub-tabs) |
+| Kullanıcılar | `(tabs)/users.tsx` | Eğitmenler / Müşteriler (sub-tabs, search, block/unblock) |
+| Operasyon | `(tabs)/operations.tsx` | Rezervasyonlar / Ödemeler (release) / Şikayetler (resolve) |
+| Sistem | `(tabs)/system.tsx` | Pistler (CRUD) / Ayarlar (KDV, komisyon, sezon) |
+
+Verification detail lives at `(admin)/verification/[id].tsx` (moved from the
+old `(app)/admin/` location).
+
+Routing rules:
+
+- `(admin)/_layout.tsx` redirects non-admins out (`/(app)/(tabs)`) and
+  unauthenticated visitors to login with `?next=/(admin)`.
+- `(app)/_layout.tsx` redirects admins into `/(admin)/(tabs)` so they
+  cannot land on customer/instructor surfaces.
+- `(auth)/login.tsx` `resolveTarget` returns `/(admin)/(tabs)` for admins,
+  ignoring any `next` param.
+
+Backend (see `supabase/migrations/2026_05_admin_panel.sql`):
+
+- Admin-additive RLS policies on `users`, `bookings`, `payouts`, `messages`,
+  `students` (read), plus admin write on `resorts` and `app_config`.
+- RPCs: `admin_stats`, `admin_set_user_status`, `admin_release_payout`,
+  `admin_resolve_flag`, `admin_upsert_resort`, `admin_delete_resort`,
+  `admin_update_config`. All check `role='admin'` from `public.users`.
+- `app_config` extended with `season_start_month/day` and
+  `season_end_month/day` columns.
+- `create_booking` was updated to read the season window from `app_config`
+  (admin Settings now actually controls booking eligibility). Same signature
+  preserved so it replaces the original function in-place.
+
+Test admin (seeded via `auth.admin.createUser` using `SUPABASE_SECRET_KEY`):
+
+- email: `admin@snowconnects.com`
+- password: `admin123`
+- role: `admin` (id `793cbd02-08f3-43bf-8316-a3596c853b1a`)
+
 ## Workspace conventions
 
 - Node 24, TypeScript 5.9, pnpm.

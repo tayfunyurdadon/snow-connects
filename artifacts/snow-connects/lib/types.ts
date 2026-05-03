@@ -165,6 +165,31 @@ export interface Payout {
   status: "pending" | "released";
 }
 
+// Admin dashboard summary returned by admin_stats() RPC.
+export interface AdminStats {
+  totalUsers: number;
+  totalCustomers: number;
+  totalInstructors: number;
+  pendingVerifications: number;
+  totalBookings: number;
+  paidBookings: number;
+  revenueKurus: number;
+  pendingPayoutsKurus: number;
+  flaggedMessages: number;
+  totalResorts: number;
+}
+
+// app_config row, with admin-editable platform settings.
+export interface AppConfig {
+  id: number;
+  vat_rate: number;
+  commission_rate: number;
+  season_start_month: number;
+  season_start_day: number;
+  season_end_month: number;
+  season_end_day: number;
+}
+
 export const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [
   { value: "first_time", label: "İlk defa" },
   { value: "0_8", label: "0–8 saat" },
