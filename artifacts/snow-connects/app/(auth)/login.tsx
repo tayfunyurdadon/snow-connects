@@ -35,8 +35,17 @@ export default function LoginScreen() {
       return;
     }
     const profile = await refreshUser();
+    console.log(
+      "[login] signIn ok, profile role=",
+      profile?.role,
+      "id=",
+      profile?.id,
+      "next=",
+      next,
+    );
     setLoading(false);
     const target = resolveTarget(next, profile?.role);
+    console.log("[login] redirecting to", target);
     router.replace(target as never);
   }
 

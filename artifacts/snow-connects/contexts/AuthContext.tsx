@@ -27,7 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(
     async (uid: string | undefined): Promise<AppUser | null> => {
+      console.log("[auth] fetchProfile start uid=", uid);
       if (!uid) {
+        console.log("[auth] fetchProfile no uid, clearing user");
         setUser(null);
         return null;
       }
@@ -37,11 +39,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq("id", uid)
         .maybeSingle();
       if (error) {
-        console.warn("[auth] profile fetch", error.message);
+        console.warn(
+          "[auth] profile fetch error code=",
+          error.code,
+          "msg=",
+          error.message,
+          "details=",
+          error.details,
+        );
         setUser(null);
         return null;
       }
       const profile = (data ?? null) as AppUser | null;
+      console.log(
+        "[auth] fetchProfile result uid=",
+        uid,
+        "role=",
+        profile?.role,
+        "status=",
+        profile?.status,
+        "rowFound=",
+        !!profile,
+      );
       setUser(profile);
       return profile;
     },

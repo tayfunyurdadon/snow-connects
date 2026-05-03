@@ -14,7 +14,10 @@ export default function AppLayout() {
   if (loading) return <Loading />;
   // Admins should never see customer/instructor surfaces — bounce them to
   // their own area. The (admin) layout enforces the same gate from its side.
-  if (user?.role === "admin") return <Redirect href="/(admin)/(tabs)" />;
+  if (user?.role === "admin") {
+    console.log("[app/_layout] admin detected → /(admin)/(tabs)");
+    return <Redirect href="/(admin)/(tabs)" />;
+  }
 
   return (
     <Stack

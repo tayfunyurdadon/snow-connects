@@ -9,10 +9,37 @@ import { adminTheme } from "@/lib/adminTheme";
 
 export default function AdminRootLayout() {
   const { loading, user, session } = useAuth();
+  console.log(
+    "[admin/_layout] render loading=",
+    loading,
+    "session?",
+    !!session,
+    "user?",
+    !!user,
+    "role=",
+    user?.role,
+  );
   if (loading) return <Loading />;
   // Hard gate: only authenticated admins can render anything inside (admin).
-  if (!session) return <Redirect href="/(auth)/login?next=/(admin)" />;
-  if (user?.role !== "admin") return <Redirect href="/(app)/(tabs)" />;
+  if (!session) {
+    console.log("[admin/_layout] no session → /(auth)/login");
+    return <Redirect href="/(auth)/login?next=/(admin)" />;
+  }
+  // If session exists but profile hasn't loaded yet, wait — do NOT bounce to
+  // the customer app, otherwise admins flicker out before fetchProfile lands.
+  if (!user) {
+    console.log("[admin/_layout] session present but user null → waiting");
+    return <Loading />;
+  }
+  if (user.role !== "admin") {
+    console.log(
+      "[admin/_layout] non-admin role=",
+      user.role,
+      "→ /(app)/(tabs)",
+    );
+    return <Redirect href="/(app)/(tabs)" />;
+  }
+  console.log("[admin/_layout] admin authenticated, rendering stack");
 
   return (
     <Stack
