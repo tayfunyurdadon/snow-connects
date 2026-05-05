@@ -3,11 +3,16 @@ import React from "react";
 
 import { Loading } from "@/components/ui/Loading";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBookingRealtime } from "@/hooks/useBookingRealtime";
 import { useColors } from "@/hooks/useColors";
 
 export default function AppLayout() {
   const { loading, user } = useAuth();
   const c = useColors();
+  // Subscribe to live booking updates for the signed-in user. The
+  // hook is a no-op until `user` is set, so it's safe to call
+  // unconditionally above the redirect.
+  useBookingRealtime();
 
   // Guest browsing is allowed. Individual screens (booking, payment, chat,
   // panels) gate on session themselves.
