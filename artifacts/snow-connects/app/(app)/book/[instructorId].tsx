@@ -387,20 +387,12 @@ export default function BookScreen() {
           },
         ],
       );
-    } else if (createdIds.length === 1) {
-      // Single-day booking → straight to its payment page (no extra tap).
-      router.replace(`/(app)/payment/${createdIds[0]}`);
     } else {
-      Alert.alert(
-        "Rezervasyon onaylandı",
-        `${createdIds.length} ders oluşturuldu. Ödemeyi rezervasyonlarım sayfasından tamamlayabilirsin.`,
-        [
-          {
-            text: "Rezervasyonlarım",
-            onPress: () => router.replace("/(app)/(tabs)/bookings"),
-          },
-        ],
-      );
+      // Always send the customer straight to the payment screen — no
+      // extra tap, no detour through the bookings list. For multi-day
+      // bookings we land on the first day's payment; once it succeeds
+      // the payment screen advances them through the rest in order.
+      router.replace(`/(app)/payment/${createdIds[0]}`);
     }
   }
 

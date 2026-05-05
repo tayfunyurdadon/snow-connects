@@ -108,12 +108,22 @@ export default function BookingsTab() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    return data.filter((b) =>
-      tab === "upcoming"
-        ? b.lesson_date >= todayIso && b.lesson_status !== "cancelled"
-        : b.lesson_date < todayIso || b.lesson_status === "completed",
+    // Customers only see bookings whose payment has cleared. Unpaid
+    // drafts still exist server-side (for slot reservation + resume
+    // flow), but the customer-facing list stays clean — payment is
+    // completed inline from the booking screen, not from this tab.
+    // Instructors see every booking that targets them regardless of
+    // payment state, since payment is the customer's responsibility.
+    const paymentOk = (b: Booking) =>
+      user?.role === "instructor" ? true : b.payment_status === "paid";
+    return data.filter(
+      (b) =>
+        paymentOk(b) &&
+        (tab === "upcoming"
+          ? b.lesson_date >= todayIso && b.lesson_status !== "cancelled"
+          : b.lesson_date < todayIso || b.lesson_status === "completed"),
     );
-  }, [data, tab, todayIso]);
+  }, [data, tab, todayIso, user?.role]);
 
   if (!user) {
     return (
