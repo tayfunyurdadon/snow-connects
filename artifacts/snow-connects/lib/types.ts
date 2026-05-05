@@ -138,7 +138,9 @@ export interface Booking {
   commission_amount: number;
   total_price: number;
   payment_status: "pending" | "paid" | "failed" | "refunded";
-  lesson_status: "upcoming" | "completed" | "cancelled";
+  lesson_status: "upcoming" | "in_progress" | "completed" | "cancelled";
+  lesson_started_at: string | null;
+  lesson_ended_at: string | null;
   lesson_date: string;
   created_at: string;
   is_test_booking: boolean;

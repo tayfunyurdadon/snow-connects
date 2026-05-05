@@ -25,7 +25,9 @@ import { formatDateTR } from "@/lib/format";
 import { isInSeason, nextSeasonStart } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
-import type { TimeSlot } from "@/lib/types";
+import type { Booking, TimeSlot } from "@/lib/types";
+
+type ActionMode = "menu" | "cancel";
 
 export default function InstructorCalendar() {
   const c = useColors();
@@ -50,25 +52,57 @@ export default function InstructorCalendar() {
     enabled: !!user,
   });
 
+  // Bookings for the same day, used to know each booked slot's
+  // lesson_status so we can show Start/End/Cancel correctly.
+  const { data: dayBookings } = useQuery({
+    queryKey: ["my-day-bookings", user?.id, date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("instructor_id", user!.id)
+        .eq("lesson_date", date);
+      if (error) throw error;
+      return (data ?? []) as Booking[];
+    },
+    enabled: !!user,
+  });
+
   if (!user) return <Loading />;
 
   const slotMap = new Map((slots ?? []).map((s) => [s.slot_time, s]));
+  const bookingMap = new Map((dayBookings ?? []).map((b) => [b.id, b]));
 
-  // Cancellation flow state. When the instructor taps a booked slot
-  // we open a modal that asks for a reason before calling the RPC.
-  const [cancelTarget, setCancelTarget] = useState<{
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isToday = date === todayIso;
+
+  // Action sheet state for booked slots.
+  const [target, setTarget] = useState<{
     bookingId: string;
     slotTime: string;
   } | null>(null);
+  const [mode, setMode] = useState<ActionMode>("menu");
   const [cancelReason, setCancelReason] = useState("");
-  const [cancelling, setCancelling] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const targetBooking = target ? bookingMap.get(target.bookingId) : null;
+
+  function refreshDay() {
+    qc.invalidateQueries({ queryKey: ["my-slots", user!.id, date] });
+    qc.invalidateQueries({ queryKey: ["my-day-bookings", user!.id, date] });
+    qc.invalidateQueries({ queryKey: ["bookings"] });
+  }
+
+  function closeSheet() {
+    setTarget(null);
+    setMode("menu");
+    setCancelReason("");
+  }
 
   async function handleSlotTap(slotTime: string) {
     if (!user) return;
     const existing = slotMap.get(slotTime);
     if (existing?.status === "booked") {
-      // Open cancel modal — server enforces ownership; we just collect
-      // the reason and confirm.
       if (!existing.booking_id) {
         Alert.alert(
           "Hata",
@@ -76,8 +110,9 @@ export default function InstructorCalendar() {
         );
         return;
       }
+      setTarget({ bookingId: existing.booking_id, slotTime });
+      setMode("menu");
       setCancelReason("");
-      setCancelTarget({ bookingId: existing.booking_id, slotTime });
       return;
     }
     if (existing?.status === "manual") {
@@ -96,8 +131,39 @@ export default function InstructorCalendar() {
     qc.invalidateQueries({ queryKey: ["my-slots", user.id, date] });
   }
 
+  async function startLesson() {
+    if (!target) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("instructor_start_lesson", {
+      p_booking: target.bookingId,
+    });
+    setBusy(false);
+    if (error) {
+      Alert.alert("Başlatılamadı", error.message);
+      return;
+    }
+    closeSheet();
+    refreshDay();
+  }
+
+  async function endLesson() {
+    if (!target) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("instructor_end_lesson", {
+      p_booking: target.bookingId,
+    });
+    setBusy(false);
+    if (error) {
+      Alert.alert("Bitirilemedi", error.message);
+      return;
+    }
+    closeSheet();
+    refreshDay();
+    Alert.alert("Ders tamamlandı", "Bu ders ödemelerine eklendi.");
+  }
+
   async function confirmCancel() {
-    if (!cancelTarget || !user) return;
+    if (!target) return;
     const reason = cancelReason.trim();
     if (reason.length < 3) {
       Alert.alert(
@@ -106,20 +172,18 @@ export default function InstructorCalendar() {
       );
       return;
     }
-    setCancelling(true);
+    setBusy(true);
     const { error } = await supabase.rpc("instructor_cancel_booking", {
-      p_booking: cancelTarget.bookingId,
+      p_booking: target.bookingId,
       p_reason: reason,
     });
-    setCancelling(false);
+    setBusy(false);
     if (error) {
       Alert.alert("İptal başarısız", error.message);
       return;
     }
-    setCancelTarget(null);
-    setCancelReason("");
-    qc.invalidateQueries({ queryKey: ["my-slots", user.id, date] });
-    qc.invalidateQueries({ queryKey: ["bookings"] });
+    closeSheet();
+    refreshDay();
     Alert.alert(
       "Rezervasyon iptal edildi",
       "Saat tekrar açıldı. Eğer ödenmiş bir rezervasyondu, müşterinin iadesi muhasebe tarafından yapılır.",
@@ -168,12 +232,40 @@ export default function InstructorCalendar() {
           {TIME_SLOTS.map((s) => {
             const ts = slotMap.get(s.id);
             const status = ts?.status ?? "available";
+            const booking = ts?.booking_id ? bookingMap.get(ts.booking_id) : null;
+            const lessonStatus = booking?.lesson_status;
+
+            // Visual tone: in-progress lessons stand out as the
+            // instructor's "happening now" focus row.
+            const tone =
+              status === "booked"
+                ? lessonStatus === "in_progress"
+                  ? "warning"
+                  : lessonStatus === "completed"
+                    ? "success"
+                    : "accent"
+                : status === "manual"
+                  ? "default"
+                  : "success";
+            const label =
+              status === "booked"
+                ? lessonStatus === "in_progress"
+                  ? "Devam ediyor"
+                  : lessonStatus === "completed"
+                    ? "Tamamlandı"
+                    : "Rezerve"
+                : status === "manual"
+                  ? "Kapalı"
+                  : "Açık";
             const dotColor =
               status === "booked"
-                ? c.accent
+                ? lessonStatus === "in_progress"
+                  ? c.warning ?? c.accent
+                  : c.accent
                 : status === "manual"
                   ? c.taupeSoft ?? c.mutedForeground
                   : c.success;
+
             return (
               <Pressable
                 key={s.id}
@@ -184,11 +276,7 @@ export default function InstructorCalendar() {
                   borderRadius: c.radius,
                   borderWidth: 1,
                   borderColor:
-                    status === "booked"
-                      ? c.accent
-                      : status === "manual"
-                        ? c.borderSoft
-                        : c.borderSoft,
+                    status === "booked" ? c.accent : c.borderSoft,
                   backgroundColor:
                     status === "booked"
                       ? c.accentSoft
@@ -226,23 +314,7 @@ export default function InstructorCalendar() {
                     {s.label}
                   </Text>
                 </View>
-                <Pill
-                  label={
-                    status === "booked"
-                      ? "Rezerve"
-                      : status === "manual"
-                        ? "Kapalı"
-                        : "Açık"
-                  }
-                  size="sm"
-                  tone={
-                    status === "booked"
-                      ? "accent"
-                      : status === "manual"
-                        ? "default"
-                        : "success"
-                  }
-                />
+                <Pill label={label} size="sm" tone={tone} />
               </Pressable>
             );
           })}
@@ -298,15 +370,16 @@ export default function InstructorCalendar() {
         </View>
       </Card>
 
+      {/* Action sheet for booked slots */}
       <Modal
-        visible={!!cancelTarget}
+        visible={!!target}
         transparent
         animationType="fade"
-        onRequestClose={() => !cancelling && setCancelTarget(null)}
+        onRequestClose={() => !busy && closeSheet()}
       >
         <Pressable
           style={styles.modalBackdrop}
-          onPress={() => !cancelling && setCancelTarget(null)}
+          onPress={() => !busy && closeSheet()}
         >
           <Pressable
             style={[
@@ -315,67 +388,150 @@ export default function InstructorCalendar() {
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text
-              style={{
-                color: c.foreground,
-                fontFamily: "Fraunces_600SemiBold",
-                fontSize: 20,
-                letterSpacing: -0.4,
-              }}
-            >
-              Rezervasyonu iptal et
-            </Text>
-            <Text
-              style={{
-                color: c.mutedForeground,
-                fontFamily: "Inter_400Regular",
-                fontSize: 13,
-                lineHeight: 19,
-              }}
-            >
-              {formatDateTR(date)} · {cancelTarget?.slotTime} saatindeki ders
-              iptal edilecek. Müşteri bildirim alır ve ödenmiş tutar iade
-              listesine düşer.
-            </Text>
-            <TextInput
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              placeholder="İptal sebebi (örn. hastalandım, hava muhalefeti)"
-              placeholderTextColor={c.mutedForeground}
-              multiline
-              numberOfLines={3}
-              style={{
-                borderWidth: 1,
-                borderColor: c.borderSoft,
-                borderRadius: 12,
-                padding: 12,
-                color: c.foreground,
-                fontFamily: "Inter_400Regular",
-                fontSize: 14,
-                minHeight: 80,
-                textAlignVertical: "top",
-                backgroundColor: c.muted,
-              }}
-              editable={!cancelling}
-            />
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <View style={{ flex: 1 }}>
+            {mode === "menu" && targetBooking ? (
+              <>
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Fraunces_600SemiBold",
+                    fontSize: 20,
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  {formatDateTR(date)} · {target?.slotTime}
+                </Text>
+
+                {targetBooking.lesson_status === "upcoming" ? (
+                  <>
+                    {isToday ? (
+                      <Button
+                        variant="primary"
+                        label="Dersi Başlat"
+                        onPress={startLesson}
+                        loading={busy}
+                      />
+                    ) : (
+                      <Text
+                        style={{
+                          color: c.mutedForeground,
+                          fontFamily: "Inter_400Regular",
+                          fontSize: 13,
+                          lineHeight: 19,
+                        }}
+                      >
+                        Dersi yalnızca ders gününde başlatabilirsin.
+                      </Text>
+                    )}
+                    <Button
+                      variant="danger"
+                      label="Rezervasyonu İptal Et"
+                      onPress={() => setMode("cancel")}
+                      disabled={busy}
+                    />
+                  </>
+                ) : null}
+
+                {targetBooking.lesson_status === "in_progress" ? (
+                  <>
+                    <Pill label="Devam ediyor" tone="warning" size="sm" />
+                    <Button
+                      variant="primary"
+                      label="Dersi Bitir"
+                      onPress={endLesson}
+                      loading={busy}
+                    />
+                  </>
+                ) : null}
+
+                {targetBooking.lesson_status === "completed" ? (
+                  <>
+                    <Pill label="Tamamlandı" tone="success" size="sm" />
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontFamily: "Inter_400Regular",
+                        fontSize: 13,
+                      }}
+                    >
+                      Bu ders ödemelerine eklendi. Ek bir aksiyon gerekmiyor.
+                    </Text>
+                  </>
+                ) : null}
+
                 <Button
                   variant="secondary"
-                  label="Vazgeç"
-                  onPress={() => setCancelTarget(null)}
-                  disabled={cancelling}
+                  label="Kapat"
+                  onPress={closeSheet}
+                  disabled={busy}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  variant="danger"
-                  label="İptal Et"
-                  onPress={confirmCancel}
-                  loading={cancelling}
+              </>
+            ) : null}
+
+            {mode === "cancel" ? (
+              <>
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Fraunces_600SemiBold",
+                    fontSize: 20,
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  Rezervasyonu iptal et
+                </Text>
+                <Text
+                  style={{
+                    color: c.mutedForeground,
+                    fontFamily: "Inter_400Regular",
+                    fontSize: 13,
+                    lineHeight: 19,
+                  }}
+                >
+                  {formatDateTR(date)} · {target?.slotTime} saatindeki ders
+                  iptal edilecek. Müşteri bildirim alır ve ödenmiş tutar iade
+                  listesine düşer.
+                </Text>
+                <TextInput
+                  value={cancelReason}
+                  onChangeText={setCancelReason}
+                  placeholder="İptal sebebi (örn. hastalandım, hava muhalefeti)"
+                  placeholderTextColor={c.mutedForeground}
+                  multiline
+                  numberOfLines={3}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: c.borderSoft,
+                    borderRadius: 12,
+                    padding: 12,
+                    color: c.foreground,
+                    fontFamily: "Inter_400Regular",
+                    fontSize: 14,
+                    minHeight: 80,
+                    textAlignVertical: "top",
+                    backgroundColor: c.muted,
+                  }}
+                  editable={!busy}
                 />
-              </View>
-            </View>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      variant="secondary"
+                      label="Geri"
+                      onPress={() => setMode("menu")}
+                      disabled={busy}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      variant="danger"
+                      label="İptal Et"
+                      onPress={confirmCancel}
+                      loading={busy}
+                    />
+                  </View>
+                </View>
+              </>
+            ) : null}
           </Pressable>
         </Pressable>
       </Modal>

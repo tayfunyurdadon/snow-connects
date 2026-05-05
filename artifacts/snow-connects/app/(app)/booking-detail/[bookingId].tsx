@@ -166,10 +166,67 @@ export default function BookingDetailScreen() {
 
       <View style={{ flexDirection: "row", gap: 8, justifyContent: "center" }}>
         <PaymentPill status={booking.payment_status} />
+        {booking.lesson_status === "in_progress" ? (
+          <Pill label="Ders devam ediyor" tone="warning" size="sm" />
+        ) : null}
+        {booking.lesson_status === "completed" ? (
+          <Pill label="Tamamlandı" tone="success" size="sm" />
+        ) : null}
         {booking.lesson_status === "cancelled" ? (
           <Pill label="İptal Edildi" tone="danger" size="sm" />
         ) : null}
       </View>
+
+      {booking.lesson_status === "in_progress" && booking.lesson_started_at ? (
+        <Card tone="soft" padding={14}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 14,
+            }}
+          >
+            Eğitmenin dersi başlattı.
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 12,
+              marginTop: 4,
+            }}
+          >
+            Başlangıç: {new Date(booking.lesson_started_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
+        </Card>
+      ) : null}
+
+      {booking.lesson_status === "completed" && booking.lesson_ended_at ? (
+        <Card tone="soft" padding={14}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 14,
+            }}
+          >
+            Ders tamamlandı.
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 12,
+              marginTop: 4,
+            }}
+          >
+            {booking.lesson_started_at
+              ? `${new Date(booking.lesson_started_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} — `
+              : ""}
+            {new Date(booking.lesson_ended_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
+        </Card>
+      ) : null}
 
       {booking.lesson_status === "cancelled" ? (
         <Card tone="soft" padding={16}>
