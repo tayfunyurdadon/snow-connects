@@ -18,12 +18,13 @@ import { Header } from "@/components/ui/Header";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
+import { StarRating } from "@/components/ui/StarRating";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { cancelLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
-import type { Booking, Resort } from "@/lib/types";
+import type { Booking, LessonReview, Resort } from "@/lib/types";
 
 type BookingWithExtras = Booking & {
   resort: Pick<Resort, "name" | "region"> | null;
@@ -67,6 +68,28 @@ export default function BookingDetailScreen() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Existing review for this booking, if any. Public-read RLS so this
+  // works for both customer and instructor (instructors can see what
+  // customers wrote about them).
+  const { data: existingReview } = useQuery({
+    queryKey: ["review", bookingId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lesson_reviews")
+        .select("*")
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as LessonReview | null;
+    },
+    enabled: !!bookingId,
+  });
+
   const refund = useMemo(
     () =>
       booking
@@ -90,6 +113,30 @@ export default function BookingDetailScreen() {
     booking.lesson_status === "upcoming" &&
     booking.payment_status === "paid" &&
     isCustomer;
+  const canReview =
+    isCustomer &&
+    booking.lesson_status === "completed" &&
+    !existingReview;
+
+  async function submitReview() {
+    if (reviewRating < 1 || reviewRating > 5) return;
+    setSubmittingReview(true);
+    const { error } = await supabase.rpc("submit_review", {
+      p_booking: bookingId,
+      p_rating: reviewRating,
+      p_comment: reviewComment.trim(),
+    });
+    setSubmittingReview(false);
+    if (error) {
+      Alert.alert("Yorum gönderilemedi", error.message);
+      return;
+    }
+    setReviewOpen(false);
+    qc.invalidateQueries({ queryKey: ["review", bookingId] });
+    qc.invalidateQueries({ queryKey: ["instructor", booking?.instructor_id] });
+    qc.invalidateQueries({ queryKey: ["instructors"] });
+    Alert.alert("Teşekkürler!", "Değerlendirmen kaydedildi.");
+  }
 
   async function confirmCancel() {
     const reason = cancelReason.trim();
@@ -229,6 +276,73 @@ export default function BookingDetailScreen() {
               : ""}
             {new Date(booking.lesson_ended_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
           </Text>
+        </Card>
+      ) : null}
+
+      {canReview ? (
+        <Card padding={18}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 18,
+              letterSpacing: -0.3,
+              marginBottom: 4,
+            }}
+          >
+            Dersini değerlendir
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 13,
+              lineHeight: 19,
+              marginBottom: 14,
+            }}
+          >
+            Eğitmenini puanla — diğer öğrencilere yardımcı olur.
+          </Text>
+          <Button
+            variant="accent"
+            label="Puan Ver"
+            onPress={() => {
+              setReviewRating(5);
+              setReviewComment("");
+              setReviewOpen(true);
+            }}
+          />
+        </Card>
+      ) : null}
+
+      {existingReview ? (
+        <Card tone="soft" padding={16}>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 12,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 8,
+            }}
+          >
+            Değerlendirmen
+          </Text>
+          <StarRating value={existingReview.rating} size={20} readOnly />
+          {existingReview.comment ? (
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+                lineHeight: 21,
+                marginTop: 10,
+              }}
+            >
+              {existingReview.comment}
+            </Text>
+          ) : null}
         </Card>
       ) : null}
 
@@ -412,6 +526,83 @@ export default function BookingDetailScreen() {
                   label="İptal Et"
                   onPress={confirmCancel}
                   loading={cancelling}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={reviewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !submittingReview && setReviewOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => !submittingReview && setReviewOpen(false)}
+        >
+          <Pressable
+            style={[
+              styles.modalCard,
+              { backgroundColor: c.card, borderColor: c.border },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 20,
+                letterSpacing: -0.4,
+              }}
+            >
+              Dersini puanla
+            </Text>
+            <View style={{ alignItems: "center", paddingVertical: 4 }}>
+              <StarRating
+                value={reviewRating}
+                onChange={setReviewRating}
+                size={36}
+              />
+            </View>
+            <TextInput
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="Yorum (isteğe bağlı)"
+              placeholderTextColor={c.mutedForeground}
+              multiline
+              numberOfLines={3}
+              style={{
+                borderWidth: 1,
+                borderColor: c.borderSoft,
+                borderRadius: 12,
+                padding: 12,
+                color: c.foreground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+                minHeight: 80,
+                textAlignVertical: "top",
+                backgroundColor: c.muted,
+              }}
+              editable={!submittingReview}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="secondary"
+                  label="Vazgeç"
+                  onPress={() => setReviewOpen(false)}
+                  disabled={submittingReview}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="accent"
+                  label="Gönder"
+                  onPress={submitReview}
+                  loading={submittingReview}
                 />
               </View>
             </View>

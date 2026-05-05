@@ -63,6 +63,7 @@ export default function InstructorDetail() {
   const headlinePrice = tiers[0].price;
   const initial = (data.user.name || "?").slice(0, 1).toUpperCase();
   const rating = data.rating ?? 5;
+  const reviewCount = data.review_count ?? 0;
 
   return (
     <Screen contentStyle={{ gap: 18, paddingBottom: 120 }}>
@@ -118,6 +119,28 @@ export default function InstructorDetail() {
               ? ` · ${data.resorts.map((r) => r.name).join(", ")}`
               : ""}
           </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 2,
+            }}
+          >
+            <Feather name="star" size={12} color={c.accent} />
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 12,
+              }}
+            >
+              {rating.toFixed(1)} ·{" "}
+              {reviewCount === 0
+                ? "henüz yorum yok"
+                : `${reviewCount} değerlendirme`}
+            </Text>
+          </View>
         </View>
       </View>
 

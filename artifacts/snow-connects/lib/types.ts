@@ -41,8 +41,19 @@ export interface InstructorProfile {
   price_3_person: number;
   price_4_plus_person: number;
   rating: number;
+  review_count: number;
   resort_ids: string[];
   verification_status: VerificationStatus;
+}
+
+export interface LessonReview {
+  id: string;
+  booking_id: string;
+  customer_id: string;
+  instructor_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
 }
 
 export type CertificateType =
