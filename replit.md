@@ -178,6 +178,24 @@ Test admin (seeded via `auth.admin.createUser` using `SUPABASE_SECRET_KEY`):
 - password: `admin123`
 - role: `admin` (id `793cbd02-08f3-43bf-8316-a3596c853b1a`)
 
+### Disputes (refunds workflow)
+
+Customers can file a dispute on a paid booking once the lesson date has
+arrived. One dispute per booking. The card with the "Sorun Bildir" CTA and
+the status panel both live in `app/(app)/booking-detail/[bookingId].tsx`.
+
+Admins review pending disputes from `(admin)/(tabs)/operations.tsx` →
+"İtirazlar" sub-tab (badge counts pending). Approve sets a refund amount
+(in TL, capped at booking `total_price`), frees the slots, marks the
+booking refunded, and cancels any pending payout. Reject keeps the funds
+with the instructor. Both decisions write a customer-facing note.
+
+Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`
+(disputes table + RLS, `payouts.status` extended with `cancelled`, RPCs
+`file_dispute(uuid,text,text)` and
+`admin_resolve_dispute(uuid,text,integer,text)`). Migration must be
+pasted into the Supabase SQL editor before the UI works.
+
 ## Workspace conventions
 
 - Node 24, TypeScript 5.9, pnpm.

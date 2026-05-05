@@ -46,6 +46,36 @@ export interface InstructorProfile {
   verification_status: VerificationStatus;
 }
 
+export type DisputeReason =
+  | "lesson_not_held"
+  | "instructor_no_show"
+  | "instructor_late"
+  | "safety_concern"
+  | "other";
+
+export const DISPUTE_REASONS: { value: DisputeReason; label: string }[] = [
+  { value: "lesson_not_held", label: "Ders gerçekleşmedi" },
+  { value: "instructor_no_show", label: "Eğitmen gelmedi" },
+  { value: "instructor_late", label: "Eğitmen çok geç kaldı" },
+  { value: "safety_concern", label: "Güvenlik sorunu" },
+  { value: "other", label: "Diğer" },
+];
+
+export interface Dispute {
+  id: string;
+  booking_id: string;
+  customer_id: string;
+  instructor_id: string;
+  reason: DisputeReason;
+  description: string;
+  status: "pending" | "approved" | "rejected";
+  refund_amount: number | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+}
+
 export interface LessonReview {
   id: string;
   booking_id: string;
@@ -186,7 +216,7 @@ export interface Payout {
   net_amount: number;
   lesson_date: string;
   release_date: string;
-  status: "pending" | "released";
+  status: "pending" | "released" | "cancelled";
 }
 
 // Admin dashboard summary returned by admin_stats() RPC.

@@ -24,7 +24,14 @@ import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { cancelLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
-import type { Booking, LessonReview, Resort } from "@/lib/types";
+import {
+  DISPUTE_REASONS,
+  type Booking,
+  type Dispute,
+  type DisputeReason,
+  type LessonReview,
+  type Resort,
+} from "@/lib/types";
 
 type BookingWithExtras = Booking & {
   resort: Pick<Resort, "name" | "region"> | null;
@@ -73,6 +80,26 @@ export default function BookingDetailScreen() {
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] =
+    useState<DisputeReason>("lesson_not_held");
+  const [disputeDescription, setDisputeDescription] = useState("");
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+
+  const { data: existingDispute } = useQuery({
+    queryKey: ["dispute", bookingId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("disputes")
+        .select("*")
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Dispute | null;
+    },
+    enabled: !!bookingId,
+  });
+
   // Existing review for this booking, if any. Public-read RLS so this
   // works for both customer and instructor (instructors can see what
   // customers wrote about them).
@@ -117,6 +144,15 @@ export default function BookingDetailScreen() {
     isCustomer &&
     booking.lesson_status === "completed" &&
     !existingReview;
+  // Customer can file a dispute once the lesson date has arrived, only
+  // for paid bookings, and only once per booking.
+  const lessonDayPassed =
+    new Date(booking.lesson_date + "T00:00:00").getTime() <= Date.now();
+  const canFileDispute =
+    isCustomer &&
+    booking.payment_status === "paid" &&
+    lessonDayPassed &&
+    !existingDispute;
 
   async function submitReview() {
     if (reviewRating < 1 || reviewRating > 5) return;
@@ -136,6 +172,34 @@ export default function BookingDetailScreen() {
     qc.invalidateQueries({ queryKey: ["instructor", booking?.instructor_id] });
     qc.invalidateQueries({ queryKey: ["instructors"] });
     Alert.alert("Teşekkürler!", "Değerlendirmen kaydedildi.");
+  }
+
+  async function submitDispute() {
+    const desc = disputeDescription.trim();
+    if (desc.length < 10) {
+      Alert.alert(
+        "Açıklama eksik",
+        "Lütfen sorunu en az 10 karakter olarak açıkla.",
+      );
+      return;
+    }
+    setSubmittingDispute(true);
+    const { error } = await supabase.rpc("file_dispute", {
+      p_booking: bookingId,
+      p_reason: disputeReason,
+      p_description: desc,
+    });
+    setSubmittingDispute(false);
+    if (error) {
+      Alert.alert("İtiraz gönderilemedi", error.message);
+      return;
+    }
+    setDisputeOpen(false);
+    qc.invalidateQueries({ queryKey: ["dispute", bookingId] });
+    Alert.alert(
+      "İtirazın alındı",
+      "Ekibimiz en kısa sürede inceleyip seninle iletişime geçecek.",
+    );
   }
 
   async function confirmCancel() {
@@ -343,6 +407,133 @@ export default function BookingDetailScreen() {
               {existingReview.comment}
             </Text>
           ) : null}
+        </Card>
+      ) : null}
+
+      {existingDispute ? (
+        <Card tone="soft" padding={16}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <Feather name="alert-triangle" size={14} color={c.accent} />
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 12,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              İtirazın
+            </Text>
+            <View style={{ marginLeft: "auto" }}>
+              <Pill
+                tone={
+                  existingDispute.status === "approved"
+                    ? "success"
+                    : existingDispute.status === "rejected"
+                      ? "danger"
+                      : "warning"
+                }
+                label={
+                  existingDispute.status === "approved"
+                    ? "Kabul edildi"
+                    : existingDispute.status === "rejected"
+                      ? "Reddedildi"
+                      : "İncelemede"
+                }
+              />
+            </View>
+          </View>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 13,
+              marginBottom: 4,
+            }}
+          >
+            {DISPUTE_REASONS.find((r) => r.value === existingDispute.reason)
+              ?.label ?? existingDispute.reason}
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 13,
+              lineHeight: 19,
+            }}
+          >
+            {existingDispute.description}
+          </Text>
+          {existingDispute.resolution_note ? (
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 13,
+                lineHeight: 19,
+                marginTop: 10,
+              }}
+            >
+              Yanıt: {existingDispute.resolution_note}
+            </Text>
+          ) : null}
+          {existingDispute.status === "approved" &&
+          existingDispute.refund_amount ? (
+            <Text
+              style={{
+                color: c.success,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+                marginTop: 10,
+              }}
+            >
+              İade tutarı: {formatTRY(existingDispute.refund_amount)}
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {canFileDispute ? (
+        <Card padding={18}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 16,
+              marginBottom: 4,
+            }}
+          >
+            Bir sorun mu yaşadın?
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 13,
+              lineHeight: 19,
+              marginBottom: 14,
+            }}
+          >
+            Ders gerçekleşmediyse veya başka bir sorun varsa bize bildir,
+            ekibimiz inceleyip iade için karar verecek.
+          </Text>
+          <Button
+            variant="secondary"
+            label="Sorun Bildir"
+            onPress={() => {
+              setDisputeReason("lesson_not_held");
+              setDisputeDescription("");
+              setDisputeOpen(true);
+            }}
+          />
         </Card>
       ) : null}
 
@@ -603,6 +794,125 @@ export default function BookingDetailScreen() {
                   label="Gönder"
                   onPress={submitReview}
                   loading={submittingReview}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={disputeOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !submittingDispute && setDisputeOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => !submittingDispute && setDisputeOpen(false)}
+          />
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: c.card, borderColor: c.border },
+            ]}
+          >
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 20,
+                letterSpacing: -0.4,
+              }}
+            >
+              Sorun bildir
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                lineHeight: 19,
+              }}
+            >
+              Ekibimiz itirazını inceleyip iade için karar verecek.
+            </Text>
+            <View style={{ gap: 8 }}>
+              {DISPUTE_REASONS.map((r) => {
+                const selected = disputeReason === r.value;
+                return (
+                  <Pressable
+                    key={r.value}
+                    onPress={() => setDisputeReason(r.value)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: selected ? c.accent : c.borderSoft,
+                      backgroundColor: selected ? c.muted : "transparent",
+                    }}
+                  >
+                    <Feather
+                      name={selected ? "check-circle" : "circle"}
+                      size={16}
+                      color={selected ? c.accent : c.mutedForeground}
+                    />
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: selected
+                          ? "Inter_600SemiBold"
+                          : "Inter_500Medium",
+                        fontSize: 14,
+                      }}
+                    >
+                      {r.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              value={disputeDescription}
+              onChangeText={setDisputeDescription}
+              placeholder="Ne oldu? (en az 10 karakter)"
+              placeholderTextColor={c.mutedForeground}
+              multiline
+              numberOfLines={4}
+              style={{
+                borderWidth: 1,
+                borderColor: c.borderSoft,
+                borderRadius: 12,
+                padding: 12,
+                color: c.foreground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+                minHeight: 100,
+                textAlignVertical: "top",
+                backgroundColor: c.muted,
+              }}
+              editable={!submittingDispute}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="secondary"
+                  label="Vazgeç"
+                  onPress={() => setDisputeOpen(false)}
+                  disabled={submittingDispute}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="danger"
+                  label="Gönder"
+                  onPress={submitDispute}
+                  loading={submittingDispute}
                 />
               </View>
             </View>
