@@ -260,8 +260,11 @@ export default function BookingsTab() {
             <Card
               key={b.id}
               onPress={() => {
-                if (b.payment_status === "pending" && user.role === "customer") {
-                  router.push(`/(app)/payment/${b.id}`);
+                // Customers tap to open the detail screen (where they
+                // can cancel). Instructors don't get a detail flow yet
+                // — they manage bookings from the calendar.
+                if (user.role === "customer") {
+                  router.push(`/(app)/booking-detail/${b.id}`);
                 }
               }}
               padding={18}

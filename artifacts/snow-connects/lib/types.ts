@@ -150,6 +150,8 @@ export interface Booking {
   cancellation_reason: string | null;
   cancelled_by: string | null;
   cancelled_at: string | null;
+  refund_amount: number | null;
+  refund_pct: number | null;
 }
 
 export interface Message {
