@@ -453,16 +453,16 @@ export default function BookingDetailScreen() {
         animationType="fade"
         onRequestClose={() => !cancelling && setCancelOpen(false)}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => !cancelling && setCancelOpen(false)}
-        >
+        <View style={styles.modalBackdrop}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => !cancelling && setCancelOpen(false)}
+          />
+          <View
             style={[
               styles.modalCard,
               { backgroundColor: c.card, borderColor: c.border },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
             <Text
               style={{
@@ -529,8 +529,8 @@ export default function BookingDetailScreen() {
                 />
               </View>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       <Modal
@@ -539,16 +539,16 @@ export default function BookingDetailScreen() {
         animationType="fade"
         onRequestClose={() => !submittingReview && setReviewOpen(false)}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => !submittingReview && setReviewOpen(false)}
-        >
+        <View style={styles.modalBackdrop}>
           <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => !submittingReview && setReviewOpen(false)}
+          />
+          <View
             style={[
               styles.modalCard,
               { backgroundColor: c.card, borderColor: c.border },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
             <Text
               style={{
@@ -606,8 +606,8 @@ export default function BookingDetailScreen() {
                 />
               </View>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </Screen>
   );
