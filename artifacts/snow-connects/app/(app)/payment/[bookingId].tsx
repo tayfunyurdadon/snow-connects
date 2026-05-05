@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
@@ -37,6 +37,46 @@ export default function PaymentScreen() {
     },
     enabled: !!bookingId,
   });
+
+  // Live countdown to payment_deadline. The server already enforces
+  // expiry via release_expired_pending_bookings(), but we also tick
+  // here so the customer sees the timer wind down and we can route
+  // them out the moment it hits zero (without waiting for a refresh).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const expiredHandled = useRef(false);
+  const deadlineMs = booking?.payment_deadline
+    ? new Date(booking.payment_deadline).getTime()
+    : null;
+  const remainingMs =
+    deadlineMs && booking?.payment_status === "pending"
+      ? Math.max(0, deadlineMs - now)
+      : null;
+
+  useEffect(() => {
+    if (expiredHandled.current) return;
+    if (remainingMs === null) return;
+    if (remainingMs > 0) return;
+    if (booking?.payment_status !== "pending") return;
+    expiredHandled.current = true;
+    // Fire-and-forget the server-side release so the slot frees even
+    // if no one else triggers create_booking soon.
+    void supabase.rpc("release_expired_pending_bookings");
+    Alert.alert(
+      "Süre doldu",
+      "Ödeme süreniz doldu ve rezervasyon iptal edildi. Aynı saati tekrar seçip yeni bir rezervasyon oluşturabilirsiniz.",
+      [
+        {
+          text: "Tamam",
+          onPress: () => router.replace("/(app)/(tabs)"),
+        },
+      ],
+    );
+  }, [remainingMs, booking?.payment_status, router]);
 
   if (isLoading) return <Loading />;
   if (!booking) {
@@ -125,6 +165,33 @@ export default function PaymentScreen() {
         title="Ödeme"
         subtitle="Param.com entegrasyonu yakında. Şimdilik ödeme simüle edilir."
       />
+
+      {remainingMs !== null && remainingMs > 0 ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
+          <Feather
+            name="clock"
+            size={14}
+            color={remainingMs < 120_000 ? c.destructive : c.mutedForeground}
+          />
+          <Text
+            style={{
+              color:
+                remainingMs < 120_000 ? c.destructive : c.mutedForeground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 13,
+            }}
+          >
+            Ödeme için kalan süre: {formatRemaining(remainingMs)}
+          </Text>
+        </View>
+      ) : null}
 
       <Card tone="ink" padding={22}>
         <Text
@@ -232,6 +299,13 @@ export default function PaymentScreen() {
       <SupportBanner variant="tinted" />
     </Screen>
   );
+}
+
+function formatRemaining(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function BreakdownRow({ label, value }: { label: string; value: string }) {

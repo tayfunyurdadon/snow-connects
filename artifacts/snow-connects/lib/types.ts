@@ -142,6 +142,11 @@ export interface Booking {
   lesson_date: string;
   created_at: string;
   is_test_booking: boolean;
+  // Set by create_booking for non-test pending bookings (now() + 15 min).
+  // Null for paid bookings or test-mode auto-paid rows. When the
+  // deadline passes, release_expired_pending_bookings() frees the
+  // slots and marks payment_status = 'failed'.
+  payment_deadline: string | null;
 }
 
 export interface Message {
