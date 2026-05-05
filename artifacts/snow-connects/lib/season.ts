@@ -20,7 +20,13 @@ export function getSeasonForDate(date: Date): { start: Date; end: Date } {
   };
 }
 
+// TEST OVERRIDE: when true, the season gate is disabled and every
+// date is bookable. Flip back to false (or remove this flag) before
+// shipping to production. Useful during off-season QA.
+const BYPASS_SEASON_FOR_TESTING = true;
+
 export function isInSeason(date: Date): boolean {
+  if (BYPASS_SEASON_FOR_TESTING) return true;
   const { start, end } = getSeasonForDate(date);
   const t = stripTime(date).getTime();
   return t >= start.getTime() && t <= end.getTime();
