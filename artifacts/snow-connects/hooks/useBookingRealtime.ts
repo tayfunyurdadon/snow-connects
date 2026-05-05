@@ -39,8 +39,15 @@ export function useBookingRealtime() {
     if (!user) return;
     const filterCol =
       user.role === "instructor" ? "instructor_id" : "customer_id";
+    // Unique channel name per mount. Supabase JS caches channels by
+    // name internally; on React Strict-Mode double mount or fast
+    // refresh the second `channel(name)` call returns the *already
+    // subscribed* instance, and `.on(...)` after `.subscribe()`
+    // throws "cannot add postgres_changes callbacks ... after
+    // subscribe()". A fresh suffix avoids the collision.
+    const suffix = Math.random().toString(36).slice(2, 10);
     const channel = supabase
-      .channel(`bookings-${user.id}`)
+      .channel(`bookings-${user.id}-${suffix}`)
       .on(
         "postgres_changes",
         {
