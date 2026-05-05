@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/Toast";
+import { cancelLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import type { Booking } from "@/lib/types";
 
@@ -77,16 +78,20 @@ export function useBookingRealtime() {
               );
             } else if (lsChanged && ls === "completed") {
               toastRef.current.show("Dersin tamamlandı 🎿", "success");
+              // Lesson finished — drop any pending reminders.
+              void cancelLessonReminders(next.id);
             } else if (lsChanged && ls === "cancelled" && !cancelledBySelf) {
               toastRef.current.show(
                 "Eğitmenin rezervasyonu iptal etti.",
                 "danger",
               );
+              void cancelLessonReminders(next.id);
             } else if (psChanged && ps === "failed") {
               toastRef.current.show(
                 "Ödeme süresi doldu, slot serbest bırakıldı.",
                 "danger",
               );
+              void cancelLessonReminders(next.id);
             }
           } else if (role === "instructor") {
             if (psChanged && ps === "paid") {

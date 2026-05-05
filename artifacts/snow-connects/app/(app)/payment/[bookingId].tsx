@@ -14,6 +14,7 @@ import { Screen } from "@/components/ui/Screen";
 import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
+import { scheduleLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import type { Booking } from "@/lib/types";
 
@@ -29,11 +30,18 @@ export default function PaymentScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bookings")
-        .select("*")
+        .select(
+          "*, resort:resorts(name), instructor:users!instructor_id(full_name)",
+        )
         .eq("id", bookingId)
         .maybeSingle();
       if (error) throw error;
-      return data as Booking | null;
+      return data as
+        | (Booking & {
+            resort: { name: string } | null;
+            instructor: { full_name: string } | null;
+          })
+        | null;
     },
     enabled: !!bookingId,
   });
@@ -101,6 +109,18 @@ export default function PaymentScreen() {
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
+    // Schedule local lesson reminders (T-24h and T-1h). Permission
+    // prompt fires here on first paid booking; on web this is a
+    // no-op since expo-notifications has no web scheduler.
+    if (booking) {
+      void scheduleLessonReminders({
+        bookingId: booking.id,
+        lessonDate: booking.lesson_date,
+        slotIds: booking.slot_ids,
+        resortName: booking.resort?.name ?? "Pist",
+        instructorName: booking.instructor?.full_name ?? "Eğitmen",
+      });
+    }
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking", bookingId] });
     Alert.alert(

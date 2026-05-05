@@ -21,6 +21,7 @@ import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
+import { cancelLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import type { Booking, Resort } from "@/lib/types";
 
@@ -110,6 +111,9 @@ export default function BookingDetailScreen() {
       return;
     }
     setCancelOpen(false);
+    // Drop any scheduled local reminders so the customer doesn't get
+    // pinged about a lesson they cancelled.
+    void cancelLessonReminders(bookingId);
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
     const result = data as { refund_pct?: number; refund_amount?: number };
