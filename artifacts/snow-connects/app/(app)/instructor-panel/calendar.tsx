@@ -2,8 +2,17 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
 import { MonthCalendar } from "@/components/ui/MonthCalendar";
@@ -45,11 +54,30 @@ export default function InstructorCalendar() {
 
   const slotMap = new Map((slots ?? []).map((s) => [s.slot_time, s]));
 
-  async function toggleBlock(slotTime: string) {
+  // Cancellation flow state. When the instructor taps a booked slot
+  // we open a modal that asks for a reason before calling the RPC.
+  const [cancelTarget, setCancelTarget] = useState<{
+    bookingId: string;
+    slotTime: string;
+  } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  async function handleSlotTap(slotTime: string) {
     if (!user) return;
     const existing = slotMap.get(slotTime);
     if (existing?.status === "booked") {
-      Alert.alert("Bilgi", "Onaylanmış rezervasyon iptal edilemez.");
+      // Open cancel modal — server enforces ownership; we just collect
+      // the reason and confirm.
+      if (!existing.booking_id) {
+        Alert.alert(
+          "Hata",
+          "Bu rezervasyona bağlı kayıt bulunamadı. Lütfen sayfayı yenile.",
+        );
+        return;
+      }
+      setCancelReason("");
+      setCancelTarget({ bookingId: existing.booking_id, slotTime });
       return;
     }
     if (existing?.status === "manual") {
@@ -66,6 +94,36 @@ export default function InstructorCalendar() {
       if (error) Alert.alert("Hata", error.message);
     }
     qc.invalidateQueries({ queryKey: ["my-slots", user.id, date] });
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget || !user) return;
+    const reason = cancelReason.trim();
+    if (reason.length < 3) {
+      Alert.alert(
+        "Sebep gerekli",
+        "İptal sebebini en az 3 karakter olarak yaz — müşteri bunu görecek.",
+      );
+      return;
+    }
+    setCancelling(true);
+    const { error } = await supabase.rpc("instructor_cancel_booking", {
+      p_booking: cancelTarget.bookingId,
+      p_reason: reason,
+    });
+    setCancelling(false);
+    if (error) {
+      Alert.alert("İptal başarısız", error.message);
+      return;
+    }
+    setCancelTarget(null);
+    setCancelReason("");
+    qc.invalidateQueries({ queryKey: ["my-slots", user.id, date] });
+    qc.invalidateQueries({ queryKey: ["bookings"] });
+    Alert.alert(
+      "Rezervasyon iptal edildi",
+      "Saat tekrar açıldı. Eğer ödenmiş bir rezervasyondu, müşterinin iadesi muhasebe tarafından yapılır.",
+    );
   }
 
   return (
@@ -119,8 +177,7 @@ export default function InstructorCalendar() {
             return (
               <Pressable
                 key={s.id}
-                onPress={() => toggleBlock(s.id)}
-                disabled={status === "booked"}
+                onPress={() => handleSlotTap(s.id)}
                 style={({ pressed }) => ({
                   paddingHorizontal: 16,
                   paddingVertical: 14,
@@ -240,8 +297,106 @@ export default function InstructorCalendar() {
           <Feather name="chevron-right" size={20} color={c.mutedForeground} />
         </View>
       </Card>
+
+      <Modal
+        visible={!!cancelTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !cancelling && setCancelTarget(null)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => !cancelling && setCancelTarget(null)}
+        >
+          <Pressable
+            style={[
+              styles.modalCard,
+              { backgroundColor: c.card, borderColor: c.border },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 20,
+                letterSpacing: -0.4,
+              }}
+            >
+              Rezervasyonu iptal et
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                lineHeight: 19,
+              }}
+            >
+              {formatDateTR(date)} · {cancelTarget?.slotTime} saatindeki ders
+              iptal edilecek. Müşteri bildirim alır ve ödenmiş tutar iade
+              listesine düşer.
+            </Text>
+            <TextInput
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="İptal sebebi (örn. hastalandım, hava muhalefeti)"
+              placeholderTextColor={c.mutedForeground}
+              multiline
+              numberOfLines={3}
+              style={{
+                borderWidth: 1,
+                borderColor: c.borderSoft,
+                borderRadius: 12,
+                padding: 12,
+                color: c.foreground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 14,
+                minHeight: 80,
+                textAlignVertical: "top",
+                backgroundColor: c.muted,
+              }}
+              editable={!cancelling}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="secondary"
+                  label="Vazgeç"
+                  onPress={() => setCancelTarget(null)}
+                  disabled={cancelling}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  variant="danger"
+                  label="İptal Et"
+                  onPress={confirmCancel}
+                  loading={cancelling}
+                />
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 22,
+    gap: 14,
+  },
+});

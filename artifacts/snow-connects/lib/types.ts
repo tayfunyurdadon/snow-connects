@@ -147,6 +147,9 @@ export interface Booking {
   // deadline passes, release_expired_pending_bookings() frees the
   // slots and marks payment_status = 'failed'.
   payment_deadline: string | null;
+  cancellation_reason: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
 }
 
 export interface Message {
