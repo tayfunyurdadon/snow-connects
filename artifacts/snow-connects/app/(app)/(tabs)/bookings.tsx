@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
@@ -33,6 +33,7 @@ export default function BookingsTab() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const router = useRouter();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("upcoming");
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -123,12 +124,35 @@ export default function BookingsTab() {
     staleTime: 30_000,
   });
 
+  // Customer-only "Bekleyen Ödemeler" — bookings the customer started
+  // but didn't complete payment for. Each row carries a server-side
+  // `payment_deadline` (15 min from creation); after expiry they're
+  // swept by release_expired_pending_bookings() and won't appear here.
+  const pendingPayments = useMemo(() => {
+    if (!data || user?.role !== "customer") return [];
+    return data.filter(
+      (b) =>
+        b.payment_status === "pending" &&
+        b.lesson_status !== "cancelled" &&
+        b.payment_deadline,
+    );
+  }, [data, user?.role]);
+
+  // Auto-refresh every 30s while the customer has any pending booking,
+  // so the countdown card updates and disappears as soon as the
+  // server-side sweep runs.
+  useEffect(() => {
+    if (pendingPayments.length === 0) return;
+    const id = setInterval(() => {
+      void qc.invalidateQueries({ queryKey: ["bookings", user?.id, user?.role] });
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [pendingPayments.length, qc, user?.id, user?.role]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
-    // Customers only see bookings whose payment has cleared. Unpaid
-    // drafts still exist server-side (for slot reservation + resume
-    // flow), but the customer-facing list stays clean — payment is
-    // completed inline from the booking screen, not from this tab.
+    // Customers only see paid bookings in the main list — pending ones
+    // are surfaced separately in the "Bekleyen Ödemeler" section above.
     // Instructors see every booking that targets them regardless of
     // payment state, since payment is the customer's responsibility.
     const paymentOk = (b: Booking) =>
@@ -141,6 +165,22 @@ export default function BookingsTab() {
           : b.lesson_date < todayIso || b.lesson_status === "completed"),
     );
   }, [data, tab, todayIso, user?.role]);
+
+  const cancelPending = async (bookingId: string) => {
+    try {
+      const { error } = await supabase.rpc("customer_cancel_booking", {
+        p_booking: bookingId,
+        p_reason: "Ödeme tamamlanmadı",
+      });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ["bookings", user?.id, user?.role] });
+    } catch (e) {
+      Alert.alert(
+        "İptal edilemedi",
+        e instanceof Error ? e.message : "Bilinmeyen hata.",
+      );
+    }
+  };
 
   if (!user) {
     return (
@@ -158,6 +198,54 @@ export default function BookingsTab() {
       onRefresh={refetch}
     >
       <Header eyebrow="Derslerim" title="Rezervasyonlar" />
+
+      {pendingPayments.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 17,
+              letterSpacing: -0.3,
+            }}
+          >
+            Bekleyen Ödemeler
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 12,
+              lineHeight: 18,
+              marginTop: -4,
+            }}
+          >
+            Süre dolmadan ödemeni tamamla, aksi halde rezervasyon otomatik iptal
+            edilecek.
+          </Text>
+          {pendingPayments.map((b) => (
+            <PendingPaymentCard
+              key={b.id}
+              booking={b}
+              onPay={() => router.push(`/(app)/payment/${b.id}`)}
+              onCancel={() => {
+                Alert.alert(
+                  "Rezervasyonu iptal et",
+                  "Bu bekleyen rezervasyonu iptal etmek istediğine emin misin?",
+                  [
+                    { text: "Vazgeç", style: "cancel" },
+                    {
+                      text: "İptal Et",
+                      style: "destructive",
+                      onPress: () => void cancelPending(b.id),
+                    },
+                  ],
+                );
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -409,6 +497,139 @@ function Row({
 
 function TestBadge() {
   return <Pill label="TEST" tone="ink" size="sm" />;
+}
+
+function PendingPaymentCard({
+  booking,
+  onPay,
+  onCancel,
+}: {
+  booking: Booking & {
+    resort: Pick<Resort, "name" | "region"> | null;
+    instructor: { id: string; name: string } | null;
+  };
+  onPay: () => void;
+  onCancel: () => void;
+}) {
+  const c = useColors();
+  // Live countdown ticker — recompute every second so the user sees
+  // the deadline shrink in real time. Server is the source of truth;
+  // when it hits zero we just disable the "Pay" CTA, the next
+  // refresh sweep will remove the row entirely.
+  const deadlineMs = booking.payment_deadline
+    ? new Date(booking.payment_deadline).getTime()
+    : 0;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remaining = Math.max(0, deadlineMs - now);
+  const expired = remaining === 0;
+  const mins = Math.floor(remaining / 60_000);
+  const secs = Math.floor((remaining % 60_000) / 1000);
+  const mmss = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const warning = remaining < 5 * 60_000;
+
+  return (
+    <Card padding={16}>
+      <View style={{ gap: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 10,
+          }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 11,
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+              }}
+            >
+              {booking.resort?.region ?? ""}
+            </Text>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 17,
+                letterSpacing: -0.3,
+              }}
+            >
+              {booking.resort?.name ?? "Pist"}
+            </Text>
+            {booking.instructor?.name ? (
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                Eğitmen: {booking.instructor.name}
+              </Text>
+            ) : null}
+          </View>
+          <Pill
+            label={expired ? "Süresi doldu" : `Kalan ${mmss}`}
+            tone={expired ? "danger" : warning ? "danger" : "warning"}
+            size="sm"
+          />
+        </View>
+
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", gap: 14 }}>
+            <Row icon="calendar" text={formatDateTR(booking.lesson_date)} />
+            <Row
+              icon="users"
+              text={`${booking.student_count} öğr · ${booking.slot_ids.length} ders`}
+            />
+          </View>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_700Bold",
+              fontSize: 16,
+              letterSpacing: -0.3,
+            }}
+          >
+            {formatTRY(booking.total_price)}
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Button
+              label="İptal Et"
+              variant="secondary"
+              onPress={onCancel}
+            />
+          </View>
+          <View style={{ flex: 1.4 }}>
+            <Button
+              label={expired ? "Süresi Doldu" : "Ödemeyi Tamamla"}
+              variant="accent"
+              onPress={onPay}
+              disabled={expired}
+            />
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
 }
 
 function PaymentPill({ status }: { status: Booking["payment_status"] }) {
