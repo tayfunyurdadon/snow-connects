@@ -1748,6 +1748,13 @@ begin
          payment_deadline = null
    where id = p_booking;
 
+  -- Cancel any pending payout so a cancelled lesson doesn't keep
+  -- showing up under "Bekleyen Ödeme — Eğitmenlere".
+  update payouts
+     set status = 'cancelled'
+   where booking_id = p_booking
+     and status = 'pending';
+
   return json_build_object(
     'booking_id', p_booking,
     'lesson_status', 'cancelled',
@@ -1876,6 +1883,13 @@ begin
          refund_pct = v_refund_pct,
          refund_amount = v_refund_amount
    where id = p_booking;
+
+  -- Cancel any pending payout so a cancelled lesson doesn't keep
+  -- showing up under "Bekleyen Ödeme — Eğitmenlere".
+  update payouts
+     set status = 'cancelled'
+   where booking_id = p_booking
+     and status = 'pending';
 
   return json_build_object(
     'booking_id', p_booking,
