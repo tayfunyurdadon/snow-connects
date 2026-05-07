@@ -30,6 +30,8 @@ import type { Booking, Payout, Resort } from "@/lib/types";
 
 type TabKey = "pending" | "completed" | "all";
 type StatusFilter = "all" | "pending" | "released" | "cancelled";
+type ViewKey = "report" | "history";
+type PeriodKey = "week" | "month" | "season" | "all";
 
 interface PayoutRow extends Payout {
   booking?: Pick<
@@ -79,6 +81,8 @@ export default function PaymentsScreen() {
   const c = useColors();
   const router = useRouter();
   const { user } = useAuth();
+  const [view, setView] = useState<ViewKey>("report");
+  const [period, setPeriod] = useState<PeriodKey>("month");
   const [tab, setTab] = useState<TabKey>("pending");
   const [filterOpen, setFilterOpen] = useState(false);
   const [resortFilter, setResortFilter] = useState<string | null>(null);
@@ -205,13 +209,14 @@ export default function PaymentsScreen() {
     .filter((p) => p.derivedStatus === "released")
     .reduce((s, p) => s + p.net_amount, 0);
 
-  async function exportPdf() {
-    if (filtered.length === 0) {
+  async function exportPdf(rowsOverride?: PayoutRow[], heading?: string) {
+    const rows = rowsOverride ?? filtered;
+    if (rows.length === 0) {
       Alert.alert("Bilgi", "Dışa aktarılacak ödeme yok.");
       return;
     }
     const lines: string[] = [];
-    lines.push("Snow Connects — Kazanç Raporu");
+    lines.push(heading ?? "Snow Connects — Kazanç Raporu");
     lines.push(`Eğitmen: ${user!.name}`);
     lines.push(`Oluşturuldu: ${formatDateTR(new Date())}`);
     lines.push("");
@@ -222,7 +227,7 @@ export default function PaymentsScreen() {
     let totalGross = 0;
     let totalCommission = 0;
     let totalNet = 0;
-    filtered.forEach((p) => {
+    rows.forEach((p) => {
       lines.push(
         `${formatDateTR(p.lesson_date)} | ${p.customerName ?? "—"} | ${
           p.resortName ?? "—"
@@ -294,6 +299,65 @@ export default function PaymentsScreen() {
         />
       </View>
 
+      {/* VIEW TOGGLE */}
+      <View
+        style={{
+          flexDirection: "row",
+          backgroundColor: c.muted,
+          padding: 4,
+          borderRadius: 999,
+        }}
+      >
+        {(
+          [
+            { key: "report", label: "Rapor" },
+            { key: "history", label: "Geçmiş" },
+          ] as { key: ViewKey; label: string }[]
+        ).map((v) => {
+          const active = view === v.key;
+          return (
+            <Pressable
+              key={v.key}
+              onPress={() => setView(v.key)}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 999,
+                alignItems: "center",
+                backgroundColor: active ? c.card : "transparent",
+                ...((active ? { boxShadow: c.shadow } : {}) as object),
+              }}
+            >
+              <Text
+                style={{
+                  color: active ? c.foreground : c.mutedForeground,
+                  fontFamily: active ? "Inter_700Bold" : "Inter_500Medium",
+                  fontSize: 13,
+                }}
+              >
+                {v.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {view === "report" ? (
+        <ReportView
+          rows={enriched}
+          period={period}
+          onPeriodChange={setPeriod}
+          onExport={(scopedRows, label) =>
+            exportPdf(
+              scopedRows,
+              `Snow Connects — Kazanç Raporu (${label})`,
+            )
+          }
+        />
+      ) : null}
+
+      {view === "history" ? (
+        <>
       {/* TABS */}
       <View
         style={{
@@ -368,7 +432,7 @@ export default function PaymentsScreen() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={exportPdf}
+          onPress={() => exportPdf()}
           style={{
             flex: 1,
             flexDirection: "row",
@@ -413,6 +477,8 @@ export default function PaymentsScreen() {
           ))}
         </View>
       )}
+        </>
+      ) : null}
 
       <FilterSheet
         open={filterOpen}
@@ -890,5 +956,540 @@ function FilterChip({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------
+// Report (Rapor) view: period-scoped earnings dashboard.
+// ---------------------------------------------------------------
+
+const PERIOD_LABELS: { key: PeriodKey; label: string }[] = [
+  { key: "week", label: "Bu hafta" },
+  { key: "month", label: "Bu ay" },
+  { key: "season", label: "Bu sezon" },
+  { key: "all", label: "Tümü" },
+];
+
+function startOfWeek(d: Date): Date {
+  // Monday as first day of week.
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  const day = out.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  out.setDate(out.getDate() + diff);
+  return out;
+}
+
+function periodRange(period: PeriodKey): { from: Date | null; to: Date } {
+  const now = new Date();
+  const to = new Date(now);
+  to.setHours(23, 59, 59, 999);
+  if (period === "all") return { from: null, to };
+  if (period === "week") return { from: startOfWeek(now), to };
+  if (period === "month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from, to };
+  }
+  // Season: 15 December → 15 April. Pick the season window that contains
+  // (or most recently preceded) "now".
+  const y = now.getFullYear();
+  const dec15 = new Date(y, 11, 15);
+  const apr15 = new Date(y, 3, 15, 23, 59, 59, 999);
+  if (now <= apr15) {
+    return { from: new Date(y - 1, 11, 15), to: apr15 };
+  }
+  if (now >= dec15) {
+    return { from: dec15, to: new Date(y + 1, 3, 15, 23, 59, 59, 999) };
+  }
+  // Off-season (Apr 16 → Dec 14): show the most recent completed season.
+  return { from: new Date(y - 1, 11, 15), to: apr15 };
+}
+
+function inPeriod(dateStr: string, range: { from: Date | null; to: Date }) {
+  const d = new Date(dateStr + "T00:00:00");
+  if (range.from && d < range.from) return false;
+  if (d > range.to) return false;
+  return true;
+}
+
+function ReportView({
+  rows,
+  period,
+  onPeriodChange,
+  onExport,
+}: {
+  rows: PayoutRow[];
+  period: PeriodKey;
+  onPeriodChange: (p: PeriodKey) => void;
+  onExport: (scopedRows: PayoutRow[], periodLabel: string) => void;
+}) {
+  const c = useColors();
+
+  const range = useMemo(() => periodRange(period), [period]);
+
+  const scoped = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          r.derivedStatus !== "cancelled" && inPeriod(r.lesson_date, range),
+      ),
+    [rows, range],
+  );
+
+  const releasedNet = scoped
+    .filter((r) => r.derivedStatus === "released")
+    .reduce((s, r) => s + r.net_amount, 0);
+  const pendingNet = scoped
+    .filter((r) => r.derivedStatus === "pending")
+    .reduce((s, r) => s + r.net_amount, 0);
+  const totalNet = releasedNet + pendingNet;
+  const totalGross = scoped.reduce((s, r) => s + r.gross_amount, 0);
+  const totalCommission = scoped.reduce((s, r) => s + r.commission, 0);
+  const lessonCount = scoped.length;
+  const studentCount = scoped.reduce(
+    (s, r) => s + (r.booking?.student_count ?? 0),
+    0,
+  );
+  const avgPerLesson = lessonCount > 0 ? Math.round(totalNet / lessonCount) : 0;
+
+  // Top resorts inside this period.
+  const resortAgg = new Map<
+    string,
+    { name: string; lessons: number; net: number }
+  >();
+  scoped.forEach((r) => {
+    const key = r.booking?.resort_id ?? "unknown";
+    const cur =
+      resortAgg.get(key) ?? {
+        name: r.resortName ?? "Pist",
+        lessons: 0,
+        net: 0,
+      };
+    cur.lessons += 1;
+    cur.net += r.net_amount;
+    resortAgg.set(key, cur);
+  });
+  const topResorts = Array.from(resortAgg.values())
+    .sort((a, b) => b.net - a.net)
+    .slice(0, 3);
+
+  // Weekly bars: last 8 weeks (anchored to this Monday) of net earnings,
+  // independent of `period`. Gives a stable trend view.
+  const weeks: { label: string; net: number; from: Date }[] = [];
+  const thisMonday = startOfWeek(new Date());
+  for (let i = 7; i >= 0; i--) {
+    const from = new Date(thisMonday);
+    from.setDate(from.getDate() - i * 7);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 6);
+    to.setHours(23, 59, 59, 999);
+    const net = rows
+      .filter(
+        (r) =>
+          r.derivedStatus !== "cancelled" &&
+          inPeriod(r.lesson_date, { from, to }),
+      )
+      .reduce((s, r) => s + r.net_amount, 0);
+    weeks.push({
+      label: `${from.getDate()}/${from.getMonth() + 1}`,
+      net,
+      from,
+    });
+  }
+  const maxWeekNet = Math.max(...weeks.map((w) => w.net), 1);
+
+  return (
+    <View style={{ gap: 16 }}>
+      {/* PERIOD CHIPS */}
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        {PERIOD_LABELS.map((p) => {
+          const active = period === p.key;
+          return (
+            <Pressable
+              key={p.key}
+              onPress={() => onPeriodChange(p.key)}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: active ? c.accent : c.borderSoft,
+                backgroundColor: active ? c.accentSoft : c.card,
+              }}
+            >
+              <Text
+                style={{
+                  color: active ? c.accentDeep : c.foreground,
+                  fontFamily: active ? "Inter_700Bold" : "Inter_500Medium",
+                  fontSize: 12,
+                }}
+              >
+                {p.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* HERO */}
+      <Card tone="ink" padding={20}>
+        <Text
+          style={{
+            color: c.background,
+            opacity: 0.7,
+            fontFamily: "Inter_500Medium",
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
+        >
+          {PERIOD_LABELS.find((p) => p.key === period)?.label ?? ""} · Net
+          kazanç
+        </Text>
+        <Text
+          style={{
+            color: c.background,
+            fontFamily: "Fraunces_700Bold",
+            fontSize: 36,
+            letterSpacing: -1,
+            marginTop: 6,
+          }}
+          adjustsFontSizeToFit
+          numberOfLines={1}
+        >
+          {formatTRY(totalNet)}
+        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 16,
+            marginTop: 14,
+            paddingTop: 14,
+            borderTopWidth: 1,
+            borderTopColor: "rgba(255,255,255,0.15)",
+          }}
+        >
+          <HeroSplit
+            label="Aktarıldı"
+            value={formatTRY(releasedNet)}
+            color={c.background}
+          />
+          <HeroSplit
+            label="Bekleyen"
+            value={formatTRY(pendingNet)}
+            color={c.background}
+          />
+        </View>
+      </Card>
+
+      {/* STATS GRID */}
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <StatTile label="Ders" value={String(lessonCount)} icon="calendar" />
+        <StatTile
+          label="Öğrenci"
+          value={String(studentCount)}
+          icon="users"
+        />
+      </View>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <StatTile
+          label="Ort. ders"
+          value={formatTRY(avgPerLesson)}
+          icon="bar-chart-2"
+        />
+        <StatTile
+          label="Komisyon"
+          value={formatTRY(totalCommission)}
+          icon="percent"
+        />
+      </View>
+
+      {/* WEEKLY BARS */}
+      <Card padding={18}>
+        <Text
+          style={{
+            color: c.foreground,
+            fontFamily: "Fraunces_600SemiBold",
+            fontSize: 16,
+            letterSpacing: -0.3,
+          }}
+        >
+          Haftalık trend
+        </Text>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 12,
+            marginTop: 2,
+          }}
+        >
+          Son 8 hafta · net kazanç
+        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 6,
+            height: 120,
+            marginTop: 16,
+          }}
+        >
+          {weeks.map((w, idx) => {
+            const ratio = w.net / maxWeekNet;
+            const h = Math.max(4, Math.round(ratio * 110));
+            const isLast = idx === weeks.length - 1;
+            return (
+              <View
+                key={w.from.toISOString()}
+                style={{ flex: 1, alignItems: "center", gap: 6 }}
+              >
+                <View
+                  style={{
+                    width: "100%",
+                    height: h,
+                    borderRadius: 6,
+                    backgroundColor: isLast ? c.accent : c.accentSoft,
+                  }}
+                />
+              </View>
+            );
+          })}
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 6,
+          }}
+        >
+          {weeks.map((w, idx) => (
+            <Text
+              key={`label-${idx}`}
+              style={{
+                flex: 1,
+                textAlign: "center",
+                color: c.mutedForeground,
+                fontFamily: "Inter_500Medium",
+                fontSize: 9.5,
+              }}
+              numberOfLines={1}
+            >
+              {w.label}
+            </Text>
+          ))}
+        </View>
+      </Card>
+
+      {/* TOP RESORTS */}
+      <Card padding={18}>
+        <Text
+          style={{
+            color: c.foreground,
+            fontFamily: "Fraunces_600SemiBold",
+            fontSize: 16,
+            letterSpacing: -0.3,
+            marginBottom: 12,
+          }}
+        >
+          En iyi pistler
+        </Text>
+        {topResorts.length === 0 ? (
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 13,
+            }}
+          >
+            Bu dönemde ders yok.
+          </Text>
+        ) : (
+          <View style={{ gap: 10 }}>
+            {topResorts.map((r, idx) => {
+              const ratio = r.net / (topResorts[0]?.net || 1);
+              return (
+                <View key={r.name} style={{ gap: 6 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Inter_600SemiBold",
+                        fontSize: 13,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {idx + 1}. {r.name}
+                    </Text>
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Inter_700Bold",
+                        fontSize: 13,
+                      }}
+                    >
+                      {formatTRY(r.net)}
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: c.muted,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: "100%",
+                        width: `${Math.max(8, Math.round(ratio * 100))}%`,
+                        backgroundColor: c.accent,
+                      }}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      color: c.mutedForeground,
+                      fontFamily: "Inter_500Medium",
+                      fontSize: 11,
+                    }}
+                  >
+                    {r.lessons} ders
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </Card>
+
+      {/* EXPORT */}
+      <Pressable
+        onPress={() =>
+          onExport(
+            scoped,
+            PERIOD_LABELS.find((p) => p.key === period)?.label ?? "",
+          )
+        }
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          paddingVertical: 14,
+          borderRadius: 999,
+          backgroundColor: c.foreground,
+        }}
+      >
+        <Feather name="download" size={14} color={c.background} />
+        <Text
+          style={{
+            color: c.background,
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 13,
+          }}
+        >
+          Tüm kayıtları paylaş
+        </Text>
+      </Pressable>
+
+      <Text
+        style={{
+          color: c.mutedForeground,
+          fontFamily: "Inter_400Regular",
+          fontSize: 11,
+          textAlign: "center",
+        }}
+      >
+        Net kazanç = brüt − %3 komisyon. İptal edilen dersler hariç tutulur.
+      </Text>
+    </View>
+  );
+}
+
+function HeroSplit({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text
+        style={{
+          color,
+          opacity: 0.65,
+          fontFamily: "Inter_500Medium",
+          fontSize: 10.5,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          color,
+          fontFamily: "Inter_700Bold",
+          fontSize: 16,
+          marginTop: 4,
+        }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: keyof typeof Feather.glyphMap;
+}) {
+  const c = useColors();
+  return (
+    <Card style={{ flex: 1 }} padding={14}>
+      <Feather name={icon} size={14} color={c.accentDeep} />
+      <Text
+        style={{
+          color: c.foreground,
+          fontFamily: "Fraunces_700Bold",
+          fontSize: 18,
+          letterSpacing: -0.4,
+          marginTop: 8,
+        }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+      <Text
+        style={{
+          color: c.mutedForeground,
+          fontFamily: "Inter_500Medium",
+          fontSize: 10,
+          letterSpacing: 0.4,
+          textTransform: "uppercase",
+          marginTop: 2,
+        }}
+      >
+        {label}
+      </Text>
+    </Card>
   );
 }
