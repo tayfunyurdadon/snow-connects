@@ -88,7 +88,13 @@ export default function AdminDashboard() {
             />
           </View>
 
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <Stat
               icon="percent"
               label="Banka Komisyonu"
@@ -111,9 +117,6 @@ export default function AdminDashboard() {
               tone="warning"
               compact
             />
-          </View>
-
-          <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
             <Stat
               icon="check-square"
               label="Onay Kuyruğu"
