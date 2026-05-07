@@ -41,6 +41,17 @@ export default function BookingsTab() {
     queryKey: ["bookings", user?.id, user?.role],
     queryFn: async () => {
       if (!user) return [];
+      // Sweep expired pending bookings before listing. Otherwise an
+      // abandoned checkout (customer left the payment screen) keeps
+      // showing up in the instructor's list as "Ödeme bekliyor" forever
+      // — the customer's list hides pending so they never see it, but
+      // the instructor sees a phantom reservation. Cheap RPC, fire and
+      // forget on errors so the list still loads.
+      try {
+        await supabase.rpc("release_expired_pending_bookings");
+      } catch {
+        // best-effort cleanup — never block the list on this
+      }
       const filter =
         user.role === "instructor" ? "instructor_id" : "customer_id";
       console.log(
