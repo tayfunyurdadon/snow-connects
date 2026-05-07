@@ -1276,6 +1276,9 @@ declare
   v_existing time_slots%rowtype;
   v_slot_id uuid;
   v_payment_status text;
+  v_release date;
+  v_added integer;
+  v_d date;
   i integer;
 begin
   if v_customer is null then raise exception 'not authenticated'; end if;
@@ -1367,6 +1370,25 @@ begin
               (v_student->>'age')::int,
               v_student->>'experienceLevel');
   end loop;
+
+  -- Test mode auto-pay: also create the payout row so the instructor
+  -- sees the earning. Without this the only way to populate `payouts`
+  -- is via confirm_payment(), which test_mode skips.
+  if v_test_mode then
+    v_d := p_date;
+    v_added := 0;
+    while v_added < 21 loop
+      v_d := v_d + 1;
+      if extract(dow from v_d) not in (0, 6) then
+        v_added := v_added + 1;
+      end if;
+    end loop;
+    v_release := v_d;
+    insert into payouts (instructor_id, booking_id, gross_amount, commission,
+                         net_amount, lesson_date, release_date)
+      values (p_instructor, v_booking_id, v_total, v_commission,
+              v_total - v_commission, p_date, v_release);
+  end if;
 
   return json_build_object(
     'booking_id', v_booking_id,

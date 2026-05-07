@@ -35,6 +35,7 @@ import {
 
 type BookingWithExtras = Booking & {
   resort: Pick<Resort, "name" | "region"> | null;
+  instructor: { id: string; name: string } | null;
 };
 
 // Mirror of compute_cancel_refund() in SQL. Kept in sync so the
@@ -62,7 +63,9 @@ export default function BookingDetailScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bookings")
-        .select("*, resort:resorts(name, region)")
+        .select(
+          "*, resort:resorts(name, region), instructor:users!instructor_id(id, name)",
+        )
         .eq("id", bookingId)
         .maybeSingle();
       if (error) throw error;
@@ -252,6 +255,13 @@ export default function BookingDetailScreen() {
 
       <Card>
         <View style={{ gap: 14 }}>
+          {booking.instructor?.name ? (
+            <Row
+              icon="user"
+              label="Eğitmen"
+              value={booking.instructor.name}
+            />
+          ) : null}
           <Row
             icon="calendar"
             label="Ders tarihi"

@@ -190,6 +190,19 @@ Admins review pending disputes from `(admin)/(tabs)/operations.tsx` →
 booking refunded, and cancels any pending payout. Reject keeps the funds
 with the instructor. Both decisions write a customer-facing note.
 
+### Test-mode payouts fix
+
+When `app_config.test_mode = true`, `create_booking()` skips the `/payment`
+screen and writes `payment_status = 'paid'` inline. The original version
+forgot to also insert a `payouts` row, so instructors saw zero earnings for
+auto-paid bookings. `supabase/migrations/2026_05_phase6_payouts_fix.sql`
+fixes the function to insert the payout inline (release date = lesson date
++ 21 business days, matching `confirm_payment()`) and backfills payouts for
+any already-paid booking that's missing one. `schema.sql` carries the same
+fix for fresh installs.
+
+### Disputes (refunds workflow)
+
 Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`
 (disputes table + RLS, `payouts.status` extended with `cancelled`, RPCs
 `file_dispute(uuid,text,text)` and

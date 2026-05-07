@@ -57,7 +57,9 @@ export default function BookingsTab() {
       // the screen surfaces in its error UI.
       const queryPromise = supabase
         .from("bookings")
-        .select("*, resort:resorts(name, region)")
+        .select(
+          "*, resort:resorts(name, region), instructor:users!instructor_id(id, name), customer:users!customer_id(id, name)",
+        )
         .eq(filter, user.id)
         .order("lesson_date", { ascending: false });
       // Track the timer handle so we can clear it as soon as the query
@@ -99,7 +101,11 @@ export default function BookingsTab() {
         throw error;
       }
       console.log("[bookings] query ok ms=", ms, "rows=", data?.length ?? 0);
-      return data as (Booking & { resort: Pick<Resort, "name" | "region"> })[];
+      return data as (Booking & {
+        resort: Pick<Resort, "name" | "region"> | null;
+        instructor: { id: string; name: string } | null;
+        customer: { id: string; name: string } | null;
+      })[];
     },
     enabled: !!user,
     retry: 1,
@@ -313,6 +319,27 @@ export default function BookingsTab() {
                     backgroundColor: c.borderSoft,
                   }}
                 />
+
+                {/* Counterparty: instructor name for customers, customer
+                    name for instructors. Falls back gracefully if the
+                    join failed for any reason. */}
+                {(() => {
+                  const counterparty =
+                    user.role === "instructor"
+                      ? b.customer?.name
+                      : b.instructor?.name;
+                  if (!counterparty) return null;
+                  return (
+                    <Row
+                      icon="user"
+                      text={
+                        user.role === "instructor"
+                          ? counterparty
+                          : `Eğitmen: ${counterparty}`
+                      }
+                    />
+                  );
+                })()}
 
                 <View
                   style={{
