@@ -176,7 +176,16 @@ export interface Booking {
   student_count: number;
   base_amount: number;
   vat_amount: number;
+  /**
+   * Total Snow Connects revenue per booking, in kuruş.
+   * = bank_commission + transaction_fee.
+   */
   commission_amount: number;
+  /** Flat transaction fee charged on top of the lesson, in kuruş. */
+  transaction_fee: number;
+  /** Bank commission deducted from the instructor, in kuruş. */
+  bank_commission: number;
+  /** Total the customer paid, in kuruş. = base + vat + transaction_fee. */
   total_price: number;
   payment_status: "pending" | "paid" | "failed" | "refunded";
   lesson_status: "upcoming" | "in_progress" | "completed" | "cancelled";
@@ -227,7 +236,14 @@ export interface AdminStats {
   pendingVerifications: number;
   totalBookings: number;
   paidBookings: number;
+  /** Snow Connects platform revenue (bank commission + transaction fees). */
   revenueKurus: number;
+  /** Total amount customers paid (gross volume). */
+  customerPaidKurus?: number;
+  /** Sum of bank commissions across paid bookings. */
+  bankCommissionKurus?: number;
+  /** Sum of flat transaction fees collected. */
+  transactionFeesKurus?: number;
   pendingPayoutsKurus: number;
   flaggedMessages: number;
   totalResorts: number;
@@ -237,7 +253,12 @@ export interface AdminStats {
 export interface AppConfig {
   id: number;
   vat_rate: number;
+  /** Legacy field kept for backward compatibility. Not used in pricing. */
   commission_rate: number;
+  /** Bank commission rate applied to lesson amount (e.g. 0.04 = 4%). */
+  bank_commission_rate?: number;
+  /** Flat transaction fee added on top of the lesson, in kuruş. */
+  transaction_fee_kurus?: number;
   season_start_month: number;
   season_start_day: number;
   season_end_month: number;

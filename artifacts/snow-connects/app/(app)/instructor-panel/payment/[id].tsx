@@ -170,7 +170,7 @@ export default function PaymentDetailScreen() {
         <SectionLabel>Tutar Dağılımı</SectionLabel>
         <DetailRow label="Brüt tutar" value={formatTRY(payout.gross_amount)} />
         <DetailRow
-          label="Komisyon -%3"
+          label={`Banka komisyonu -%${commissionPct(payout.commission, payout.gross_amount)}`}
           value={`-${formatTRY(payout.commission)}`}
           valueColor={c.danger}
         />
@@ -272,6 +272,12 @@ export default function PaymentDetailScreen() {
       </View>
     </Screen>
   );
+}
+
+function commissionPct(commission: number, gross: number): string {
+  if (!gross || gross <= 0) return "0";
+  const pct = (commission / gross) * 100;
+  return Number.isInteger(pct) ? String(pct) : pct.toFixed(1);
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {

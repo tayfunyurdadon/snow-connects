@@ -642,7 +642,7 @@ function PaymentRow({
           color={c.foreground}
         />
         <AmountRow
-          label="Komisyon -%3"
+          label={`Banka komisyonu -%${commissionPct(row.commission, row.gross_amount)}`}
           value={`-${formatTRY(row.commission)}`}
           color={c.danger}
         />
@@ -655,6 +655,12 @@ function PaymentRow({
       </View>
     </Card>
   );
+}
+
+function commissionPct(commission: number, gross: number): string {
+  if (!gross || gross <= 0) return "0";
+  const pct = (commission / gross) * 100;
+  return Number.isInteger(pct) ? String(pct) : pct.toFixed(1);
 }
 
 function AmountRow({

@@ -1,15 +1,21 @@
-// Per-person tiered pricing helpers.
+// Per-person tiered pricing helpers + new payment-model breakdown.
 //
-// Instructors set a per-person rate for 1, 2, 3, and 4+ student lessons.
-// All values stored in kuruş (smallest TRY unit), per 50-minute slot.
-//
-// Legacy profiles created before tiered pricing only have `base_price`
-// (a per-slot, group-flat rate). We fall back to it for any unfilled
-// tier so old listings keep working until the instructor edits them.
+// Pricing model (kuruş, smallest TRY unit):
+//   lesson    = base + VAT(20% of base)
+//   bank      = round(lesson × bank_commission_rate)   (deducted from instructor)
+//   fee       = transaction_fee_kurus                  (flat, on top of lesson)
+//   customer pays = lesson + fee
+//   instructor net = lesson - bank
+//   platform revenue = bank + fee
 
 import type { InstructorProfile } from "./types";
 
 export const VAT_RATE = 0.2;
+// Defaults that mirror the seeded app_config row. Used as fallbacks when
+// the config row hasn't been read yet (e.g. first paint of the booking
+// summary). Server is the source of truth at booking time.
+export const DEFAULT_BANK_COMMISSION_RATE = 0.04;
+export const DEFAULT_TRANSACTION_FEE_KURUS = 10000; // 100 TL
 
 export type TieredProfile = Pick<
   InstructorProfile,
@@ -45,18 +51,48 @@ export interface PricingBreakdown {
   slots: number;
   base: number;
   vat: number;
+  /** lesson amount = base + vat */
+  lesson: number;
+  /** flat transaction fee (Snow Connects) */
+  transactionFee: number;
+  /** total customer pays = lesson + transactionFee */
   total: number;
+  /** bank commission deducted from instructor */
+  bankCommission: number;
+  /** instructor net = lesson - bankCommission */
+  instructorNet: number;
+}
+
+export interface BreakdownOptions {
+  bankCommissionRate?: number;
+  transactionFeeKurus?: number;
 }
 
 export function calcBreakdown(
   profile: TieredProfile | null | undefined,
   studentCount: number,
   slotCount: number,
+  opts: BreakdownOptions = {},
 ): PricingBreakdown {
+  const bankRate = opts.bankCommissionRate ?? DEFAULT_BANK_COMMISSION_RATE;
+  const fee = opts.transactionFeeKurus ?? DEFAULT_TRANSACTION_FEE_KURUS;
   const perPerson = pickTierKurus(profile, studentCount);
   const students = Math.max(1, Math.floor(studentCount || 1));
   const slots = Math.max(0, Math.floor(slotCount || 0));
   const base = perPerson * students * slots;
   const vat = Math.round(base * VAT_RATE);
-  return { perPerson, students, slots, base, vat, total: base + vat };
+  const lesson = base + vat;
+  const bankCommission = Math.round(lesson * bankRate);
+  return {
+    perPerson,
+    students,
+    slots,
+    base,
+    vat,
+    lesson,
+    transactionFee: fee,
+    total: lesson + fee,
+    bankCommission,
+    instructorNet: lesson - bankCommission,
+  };
 }

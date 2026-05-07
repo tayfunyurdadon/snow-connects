@@ -281,6 +281,18 @@ export default function BookingDetailScreen() {
             style={{ height: 1, backgroundColor: c.borderSoft, marginVertical: 4 }}
           />
           <Row
+            icon="tag"
+            label="Ders ücreti"
+            value={formatTRY(booking.base_amount + booking.vat_amount)}
+          />
+          {(booking.transaction_fee ?? 0) > 0 ? (
+            <Row
+              icon="plus-circle"
+              label="İşlem ücreti"
+              value={formatTRY(booking.transaction_fee)}
+            />
+          ) : null}
+          <Row
             icon="credit-card"
             label="Toplam ödenen"
             value={formatTRY(booking.total_price)}

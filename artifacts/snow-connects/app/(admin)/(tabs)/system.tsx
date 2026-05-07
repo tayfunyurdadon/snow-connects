@@ -224,6 +224,8 @@ function SettingsTab() {
   // user is typing so we can preserve in-progress edits.
   const [vat, setVat] = useState("");
   const [comm, setComm] = useState("");
+  const [bank, setBank] = useState("");
+  const [fee, setFee] = useState("");
   const [ssm, setSsm] = useState("");
   const [ssd, setSsd] = useState("");
   const [sem, setSem] = useState("");
@@ -234,6 +236,8 @@ function SettingsTab() {
     if (!data) return;
     setVat(String((data.vat_rate * 100).toFixed(2)));
     setComm(String((data.commission_rate * 100).toFixed(2)));
+    setBank(String(((data.bank_commission_rate ?? 0.04) * 100).toFixed(2)));
+    setFee(String(Math.round((data.transaction_fee_kurus ?? 10000) / 100)));
     setSsm(String(data.season_start_month));
     setSsd(String(data.season_start_day));
     setSem(String(data.season_end_month));
@@ -243,12 +247,22 @@ function SettingsTab() {
   async function save() {
     const vatN = Number(vat) / 100;
     const commN = Number(comm) / 100;
+    const bankN = Number(bank) / 100;
+    const feeLira = Number(fee);
     if (Number.isNaN(vatN) || vatN < 0 || vatN > 1) {
       Alert.alert("Hata", "KDV oranı 0–100 arasında olmalı.");
       return;
     }
     if (Number.isNaN(commN) || commN < 0 || commN > 1) {
       Alert.alert("Hata", "Komisyon oranı 0–100 arasında olmalı.");
+      return;
+    }
+    if (Number.isNaN(bankN) || bankN < 0 || bankN > 1) {
+      Alert.alert("Hata", "Banka komisyonu 0–100 arasında olmalı.");
+      return;
+    }
+    if (Number.isNaN(feeLira) || feeLira < 0) {
+      Alert.alert("Hata", "İşlem ücreti negatif olamaz.");
       return;
     }
     const ssmN = Number(ssm),
@@ -270,6 +284,8 @@ function SettingsTab() {
       p_season_start_day: ssdN,
       p_season_end_month: semN,
       p_season_end_day: sedN,
+      p_bank_commission_rate: bankN,
+      p_transaction_fee_kurus: Math.round(feeLira * 100),
     });
     setSaving(false);
     if (error) {
@@ -414,7 +430,27 @@ function SettingsTab() {
           </View>
           <View style={{ flex: 1 }}>
             <AdminInput
-              label="Komisyon (%)"
+              label="Banka komisyonu (%)"
+              value={bank}
+              onChangeText={setBank}
+              keyboardType="decimal-pad"
+              placeholder="4"
+            />
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+          <View style={{ flex: 1 }}>
+            <AdminInput
+              label="İşlem ücreti (TL)"
+              value={fee}
+              onChangeText={setFee}
+              keyboardType="decimal-pad"
+              placeholder="100"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AdminInput
+              label="Komisyon eski (%)"
               value={comm}
               onChangeText={setComm}
               keyboardType="decimal-pad"
@@ -422,6 +458,17 @@ function SettingsTab() {
             />
           </View>
         </View>
+        <Text
+          style={{
+            color: adminTheme.textDim,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+            marginTop: 8,
+          }}
+        >
+          Müşteri ödemesi = ders ücreti + KDV + işlem ücreti. Eğitmen
+          alacağı = ders ücreti + KDV − banka komisyonu.
+        </Text>
       </AdminCard>
 
       <AdminCard padding={16}>

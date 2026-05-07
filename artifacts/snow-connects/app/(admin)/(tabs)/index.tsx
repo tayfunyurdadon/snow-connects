@@ -73,11 +73,35 @@ export default function AdminDashboard() {
         <>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Stat
-              icon="dollar-sign"
-              label="Toplam Gelir"
-              value={formatTRY(data.revenueKurus)}
+              icon="credit-card"
+              label="Müşteri Ödemesi"
+              value={formatTRY(data.customerPaidKurus ?? data.revenueKurus)}
               caption={`${data.paidBookings} ödenmiş ders`}
+              tone="info"
+            />
+            <Stat
+              icon="dollar-sign"
+              label="Platform Geliri"
+              value={formatTRY(data.revenueKurus)}
+              caption="Komisyon + işlem"
               tone="accent"
+            />
+          </View>
+
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Stat
+              icon="percent"
+              label="Banka Komisyonu"
+              value={formatTRY(data.bankCommissionKurus ?? 0)}
+              caption="Ders üzerinden"
+              compact
+            />
+            <Stat
+              icon="layers"
+              label="İşlem Ücreti"
+              value={formatTRY(data.transactionFeesKurus ?? 0)}
+              caption="Sabit ücret"
+              compact
             />
             <Stat
               icon="clock"
@@ -85,6 +109,7 @@ export default function AdminDashboard() {
               value={formatTRY(data.pendingPayoutsKurus)}
               caption="Eğitmenlere"
               tone="warning"
+              compact
             />
           </View>
 

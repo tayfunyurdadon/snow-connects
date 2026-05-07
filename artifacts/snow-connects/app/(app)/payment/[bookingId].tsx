@@ -254,6 +254,12 @@ export default function PaymentScreen() {
             label="KDV (%20)"
             value={formatTRY(booking.vat_amount)}
           />
+          {(booking.transaction_fee ?? 0) > 0 ? (
+            <BreakdownRow
+              label="İşlem ücreti"
+              value={formatTRY(booking.transaction_fee)}
+            />
+          ) : null}
         </View>
       </Card>
 

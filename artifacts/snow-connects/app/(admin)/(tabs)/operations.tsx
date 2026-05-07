@@ -259,7 +259,7 @@ function PayoutsTab() {
                   size="sm"
                 />
                 <AdminPill
-                  label={`Komisyon ${formatTRY(p.commission)}`}
+                  label={`Banka -${formatTRY(p.commission)}`}
                   tone="default"
                   size="sm"
                 />

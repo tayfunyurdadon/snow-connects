@@ -160,6 +160,25 @@ export default function BookScreen() {
     enabled: !!instructorId,
   });
 
+  // Fetch the live pricing config so the customer-facing estimate exactly
+  // matches the server-calculated total written by create_booking().
+  const { data: pricingConfig } = useQuery({
+    queryKey: ["pricing-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_config")
+        .select("bank_commission_rate,transaction_fee_kurus")
+        .eq("id", 1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as {
+        bank_commission_rate: number | null;
+        transaction_fee_kurus: number | null;
+      } | null;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: resorts } = useQuery({
     queryKey: ["resorts-for-book", instructor?.resort_ids],
     queryFn: async () => {
@@ -227,8 +246,12 @@ export default function BookScreen() {
   }, [studentCount]);
 
   const totals = useMemo(
-    () => calcBreakdown(instructor, studentCount, selectedKeys.length),
-    [instructor, studentCount, selectedKeys.length],
+    () =>
+      calcBreakdown(instructor, studentCount, selectedKeys.length, {
+        bankCommissionRate: pricingConfig?.bank_commission_rate ?? undefined,
+        transactionFeeKurus: pricingConfig?.transaction_fee_kurus ?? undefined,
+      }),
+    [instructor, studentCount, selectedKeys.length, pricingConfig],
   );
 
   if (isLoading || !instructor || !draftHydrated || !rangeFrom || !rangeTo)
@@ -675,6 +698,12 @@ export default function BookScreen() {
               {`${totals.students} kişi × ${totals.slots} saat × ${formatTRY(totals.perPerson)} = ${formatTRY(totals.base)}`}
             </Text>
             <PriceRow label="KDV (%20)" value={formatTRY(totals.vat)} />
+            {totals.transactionFee > 0 ? (
+              <PriceRow
+                label="İşlem ücreti"
+                value={formatTRY(totals.transactionFee)}
+              />
+            ) : null}
             <View
               style={{
                 height: 1,
