@@ -253,10 +253,6 @@ function SettingsTab() {
       Alert.alert("Hata", "KDV oranı 0–100 arasında olmalı.");
       return;
     }
-    if (Number.isNaN(commN) || commN < 0 || commN > 1) {
-      Alert.alert("Hata", "Komisyon oranı 0–100 arasında olmalı.");
-      return;
-    }
     if (Number.isNaN(bankN) || bankN < 0 || bankN > 1) {
       Alert.alert("Hata", "Banka komisyonu 0–100 arasında olmalı.");
       return;
@@ -448,15 +444,7 @@ function SettingsTab() {
               placeholder="100"
             />
           </View>
-          <View style={{ flex: 1 }}>
-            <AdminInput
-              label="Komisyon eski (%)"
-              value={comm}
-              onChangeText={setComm}
-              keyboardType="decimal-pad"
-              placeholder="3"
-            />
-          </View>
+          <View style={{ flex: 1 }} />
         </View>
         <Text
           style={{

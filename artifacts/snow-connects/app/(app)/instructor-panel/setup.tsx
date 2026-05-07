@@ -408,7 +408,7 @@ export default function InstructorSetup() {
             fontSize: 13,
           }}
         >
-          Komisyon: %3
+          Banka komisyonu
         </Text>
         <Text
           style={{
@@ -419,7 +419,7 @@ export default function InstructorSetup() {
             lineHeight: 18,
           }}
         >
-          Her dersten %3 platform komisyonu kesilir. Ödemeler ders tarihinden
+          Her dersten banka komisyonu kesilir. Ödemeler ders tarihinden
           21 iş günü sonra hesabınıza aktarılır.
         </Text>
       </Card>

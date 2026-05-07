@@ -83,7 +83,7 @@ export default function AdminDashboard() {
               icon="dollar-sign"
               label="Platform Geliri"
               value={formatTRY(data.revenueKurus)}
-              caption="Komisyon + işlem"
+              caption="Banka komisyonu + işlem"
               tone="accent"
             />
           </View>

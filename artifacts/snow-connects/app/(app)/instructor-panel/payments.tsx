@@ -221,7 +221,7 @@ export default function PaymentsScreen() {
     lines.push(`Oluşturuldu: ${formatDateTR(new Date())}`);
     lines.push("");
     lines.push(
-      "Ders Tarihi | Müşteri | Pist | Brüt | Komisyon | Net | Durum",
+      "Ders Tarihi | Müşteri | Pist | Brüt | Banka Komisyonu | Net | Durum",
     );
     lines.push("─".repeat(60));
     let totalGross = 0;
@@ -247,7 +247,7 @@ export default function PaymentsScreen() {
     });
     lines.push("─".repeat(60));
     lines.push(`Toplam Brüt: ${formatTRY(totalGross)}`);
-    lines.push(`Toplam Komisyon: -${formatTRY(totalCommission)}`);
+    lines.push(`Toplam Banka Komisyonu: -${formatTRY(totalCommission)}`);
     lines.push(`Toplam Net: ${formatTRY(totalNet)}`);
     try {
       await Share.share({
@@ -1204,7 +1204,7 @@ function ReportView({
           icon="bar-chart-2"
         />
         <StatTile
-          label="Komisyon"
+          label="Banka komisyonu"
           value={formatTRY(totalCommission)}
           icon="percent"
         />
@@ -1413,7 +1413,7 @@ function ReportView({
           textAlign: "center",
         }}
       >
-        Net kazanç = brüt − %3 komisyon. İptal edilen dersler hariç tutulur.
+        Net kazanç = brüt − banka komisyonu. İptal edilen dersler hariç tutulur.
       </Text>
     </View>
   );
