@@ -31,7 +31,7 @@ export default function PaymentScreen() {
       const { data, error } = await supabase
         .from("bookings")
         .select(
-          "*, resort:resorts(name), instructor:users!instructor_id(full_name)",
+          "*, resort:resorts(name), instructor:users!instructor_id(name)",
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -39,7 +39,7 @@ export default function PaymentScreen() {
       return data as
         | (Booking & {
             resort: { name: string } | null;
-            instructor: { full_name: string } | null;
+            instructor: { name: string } | null;
           })
         | null;
     },
@@ -118,7 +118,7 @@ export default function PaymentScreen() {
         lessonDate: booking.lesson_date,
         slotIds: booking.slot_ids,
         resortName: booking.resort?.name ?? "Pist",
-        instructorName: booking.instructor?.full_name ?? "Eğitmen",
+        instructorName: booking.instructor?.name ?? "Eğitmen",
       });
     }
     qc.invalidateQueries({ queryKey: ["bookings"] });
