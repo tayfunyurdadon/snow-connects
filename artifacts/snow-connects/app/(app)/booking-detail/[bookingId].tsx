@@ -139,10 +139,19 @@ export default function BookingDetailScreen() {
   if (isLoading || !booking) return <Loading />;
 
   const isCustomer = user?.role === "customer";
+  const isInstructor = user?.role === "instructor";
   const isCancellable =
     booking.lesson_status === "upcoming" &&
     booking.payment_status === "paid" &&
     isCustomer;
+  // Instructor can cancel any booking that is not yet completed/cancelled,
+  // regardless of payment state. Pending bookings flip to 'failed', paid
+  // bookings flip to 'refunded' (full refund — server-side).
+  const isInstructorCancellable =
+    isInstructor &&
+    booking.lesson_status !== "cancelled" &&
+    booking.lesson_status !== "completed" &&
+    booking.lesson_status !== "in_progress";
   const canReview =
     isCustomer &&
     booking.lesson_status === "completed" &&
@@ -215,7 +224,10 @@ export default function BookingDetailScreen() {
       return;
     }
     setCancelling(true);
-    const { data, error } = await supabase.rpc("customer_cancel_booking", {
+    const rpcName = isInstructor
+      ? "instructor_cancel_booking"
+      : "customer_cancel_booking";
+    const { data, error } = await supabase.rpc(rpcName, {
       p_booking: bookingId,
       p_reason: reason,
     });
@@ -225,11 +237,26 @@ export default function BookingDetailScreen() {
       return;
     }
     setCancelOpen(false);
-    // Drop any scheduled local reminders so the customer doesn't get
-    // pinged about a lesson they cancelled.
+    // Drop any scheduled local reminders so neither side gets pinged
+    // about a lesson that's been cancelled.
     void cancelLessonReminders(bookingId);
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+    if (isInstructor) {
+      Alert.alert(
+        "Rezervasyon iptal edildi",
+        booking?.payment_status === "paid"
+          ? "Müşteriye tam iade yapılacak ve saatler tekrar müsait."
+          : "Saatler tekrar müsait.",
+        [
+          {
+            text: "Tamam",
+            onPress: () => router.replace("/(app)/(tabs)/bookings"),
+          },
+        ],
+      );
+      return;
+    }
     const result = data as { refund_pct?: number; refund_amount?: number };
     const pct = result?.refund_pct ?? 0;
     const amount = result?.refund_amount ?? 0;
@@ -596,6 +623,43 @@ export default function BookingDetailScreen() {
             </Text>
           ) : null}
         </Card>
+      ) : null}
+
+      {isInstructorCancellable ? (
+        <>
+          <Card tone="soft" padding={16}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 16,
+                marginBottom: 8,
+              }}
+            >
+              Rezervasyonu iptal et
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                lineHeight: 19,
+              }}
+            >
+              {booking.payment_status === "paid"
+                ? "Bu dersi iptal edersen müşteriye tam iade yapılır ve saatler tekrar açılır. Sık iptaller hesabının askıya alınmasına yol açabilir."
+                : "Müşteri henüz ödeme yapmamış. İptal edersen saatler tekrar müsait olur."}
+            </Text>
+          </Card>
+          <Button
+            variant="danger"
+            label="Rezervasyonu İptal Et"
+            onPress={() => {
+              setCancelReason("");
+              setCancelOpen(true);
+            }}
+          />
+        </>
       ) : null}
 
       {isCancellable && refund ? (

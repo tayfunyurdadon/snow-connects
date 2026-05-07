@@ -266,12 +266,9 @@ export default function BookingsTab() {
             <Card
               key={b.id}
               onPress={() => {
-                // Customers tap to open the detail screen (where they
-                // can cancel). Instructors don't get a detail flow yet
-                // — they manage bookings from the calendar.
-                if (user.role === "customer") {
-                  router.push(`/(app)/booking-detail/${b.id}`);
-                }
+                // Both customers and instructors open the detail screen
+                // (instructors can cancel from there too).
+                router.push(`/(app)/booking-detail/${b.id}`);
               }}
               padding={18}
             >
