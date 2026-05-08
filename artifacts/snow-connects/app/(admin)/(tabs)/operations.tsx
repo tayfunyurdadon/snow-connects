@@ -193,12 +193,16 @@ function PayoutsTab() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-payouts"],
     queryFn: async () => {
+      // payouts has no created_at column — order by lesson_date so the
+      // most recent lessons surface first. (Querying created_at silently
+      // 400s and the screen showed "Ödeme kaydı yok" even when there were
+      // pending payouts.)
       const { data, error } = await supabase
         .from("payouts")
         .select(
           "*, instructor:users!instructor_id(name), booking:bookings(lesson_date)",
         )
-        .order("created_at", { ascending: false })
+        .order("lesson_date", { ascending: false })
         .limit(100);
       if (error) throw error;
       return (data ?? []) as Row[];
