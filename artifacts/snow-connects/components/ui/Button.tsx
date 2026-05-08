@@ -56,12 +56,21 @@ export function Button({
   return (
     <Pressable
       testID={testID}
-      onPress={async () => {
+      onPress={() => {
         if (isDisabled) return;
+        // Fire-and-forget haptics. Awaiting it can hang on web/Expo
+        // and silently swallow the actual onPress (button looks dead).
         try {
-          await Haptics.selectionAsync();
+          void Haptics.selectionAsync().catch(() => {});
         } catch {}
-        await onPress?.();
+        try {
+          const r = onPress?.();
+          if (r && typeof (r as Promise<unknown>).catch === "function") {
+            (r as Promise<unknown>).catch(() => {});
+          }
+        } catch {
+          /* swallow — caller handles errors */
+        }
       }}
       style={({ pressed }) => [
         styles.base,
