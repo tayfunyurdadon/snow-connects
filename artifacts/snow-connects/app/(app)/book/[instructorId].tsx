@@ -313,9 +313,21 @@ export default function BookScreen() {
   }
 
   async function submit() {
+    console.log("[book] submit pressed", {
+      resortId,
+      selectedKeys,
+      students,
+      hasSession: !!session,
+      authLoading,
+    });
     const err = validate();
     if (err) {
-      Alert.alert("Eksik bilgi", err);
+      console.log("[book] validation failed:", err);
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(`Eksik bilgi: ${err}`);
+      } else {
+        Alert.alert("Eksik bilgi", err);
+      }
       return;
     }
 
@@ -365,9 +377,14 @@ export default function BookScreen() {
       });
       if (error) {
         setSubmitting(false);
+        console.log("[book] create_booking error:", error);
         const friendly = translateError(error.message);
         if (createdIds.length === 0) {
-          Alert.alert("Rezervasyon başarısız", friendly);
+          if (typeof window !== "undefined" && typeof window.alert === "function") {
+            window.alert(`Rezervasyon başarısız: ${friendly}`);
+          } else {
+            Alert.alert("Rezervasyon başarısız", friendly);
+          }
           return;
         }
         // Partial success — don't trap state; clear what was committed
