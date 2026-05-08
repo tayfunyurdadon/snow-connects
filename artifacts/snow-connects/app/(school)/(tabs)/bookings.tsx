@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Modal,
@@ -53,6 +53,7 @@ export default function SchoolCalendar() {
   }, []);
   const [selectedDate, setSelectedDate] = useState<string>(isoDate(today));
   const [weekStart, setWeekStart] = useState<Date>(today);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const days = useMemo(() => {
     return Array.from({ length: 14 }).map((_, i) => {
@@ -73,10 +74,6 @@ export default function SchoolCalendar() {
     },
   });
 
-  const [modalSlot, setModalSlot] = useState<{
-    instructor: SchoolCalendarInstructor;
-    startSlotTime: string;
-  } | null>(null);
   const [detailSlot, setDetailSlot] = useState<{
     instructor: SchoolCalendarInstructor;
     slot: SchoolCalendarSlot;
@@ -96,6 +93,17 @@ export default function SchoolCalendar() {
     onError: (e: Error) => Alert.alert("Hata", e.message),
   });
 
+  const totalBookings = useMemo(
+    () =>
+      (data?.instructors ?? []).reduce(
+        (sum, ins) =>
+          sum + ins.slots.filter((s) => s.status === "booked" && s.is_first_slot)
+            .length,
+        0,
+      ),
+    [data],
+  );
+
   return (
     <AdminScreen>
       <View
@@ -103,18 +111,32 @@ export default function SchoolCalendar() {
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 8,
         }}
       >
-        <Text
-          style={{
-            color: adminTheme.text,
-            fontFamily: adminTheme.fontHeadline,
-            fontSize: 18,
-            letterSpacing: -0.3,
-          }}
-        >
-          {dayLong(new Date(selectedDate))}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            numberOfLines={1}
+            style={{
+              color: adminTheme.text,
+              fontFamily: adminTheme.fontHeadline,
+              fontSize: 18,
+              letterSpacing: -0.3,
+            }}
+          >
+            {dayLong(new Date(selectedDate))}
+          </Text>
+          <Text
+            style={{
+              color: adminTheme.textMuted,
+              fontFamily: adminTheme.fontBody,
+              fontSize: 12,
+              marginTop: 2,
+            }}
+          >
+            {totalBookings} rezervasyon
+          </Text>
+        </View>
         <View style={{ flexDirection: "row", gap: 6 }}>
           <RoundButton
             icon="chevron-left"
@@ -186,6 +208,12 @@ export default function SchoolCalendar() {
         })}
       </ScrollView>
 
+      <AdminButton
+        label="Yeni Rezervasyon"
+        icon="plus"
+        onPress={() => setCreateOpen(true)}
+      />
+
       {isLoading ? (
         <AdminSpinner />
       ) : !data || data.instructors.length === 0 ? (
@@ -199,22 +227,17 @@ export default function SchoolCalendar() {
           <InstructorRow
             key={ins.instructor_id}
             instructor={ins}
-            onAdd={(slotTime) =>
-              setModalSlot({ instructor: ins, startSlotTime: slotTime })
-            }
             onOpen={(slot) => setDetailSlot({ instructor: ins, slot })}
           />
         ))
       )}
 
-      {modalSlot ? (
+      {createOpen ? (
         <ManualBookingModal
-          date={selectedDate}
-          instructor={modalSlot.instructor}
-          startSlotTime={modalSlot.startSlotTime}
-          onClose={() => setModalSlot(null)}
+          initialDate={selectedDate}
+          onClose={() => setCreateOpen(false)}
           onSaved={() => {
-            setModalSlot(null);
+            setCreateOpen(false);
             refetch();
           }}
         />
@@ -260,53 +283,103 @@ function RoundButton({
 
 function InstructorRow({
   instructor,
-  onAdd,
   onOpen,
 }: {
   instructor: SchoolCalendarInstructor;
-  onAdd: (slotTime: string) => void;
   onOpen: (slot: SchoolCalendarSlot) => void;
 }) {
+  // Only show first-slot rows for booked sessions (so multi-hour lessons
+  // appear once) plus any blocked rows. Skip pure available slots — the
+  // calendar is meant to highlight the day's actual program.
+  const visible = instructor.slots.filter(
+    (s) =>
+      (s.status === "booked" && s.is_first_slot) || s.status === "manual",
+  );
+  const bookedCount = instructor.slots.filter(
+    (s) => s.status === "booked" && s.is_first_slot,
+  ).length;
+  const blockedCount = instructor.slots.filter(
+    (s) => s.status === "manual",
+  ).length;
+  const totalUsed = instructor.slots.filter(
+    (s) => s.status !== "available",
+  ).length;
+  const freeCount = 8 - totalUsed;
+
   return (
     <AdminCard padding={12}>
-      <Text
+      <View
         style={{
-          color: adminTheme.text,
-          fontFamily: adminTheme.fontTitle,
-          fontSize: 14,
-          marginBottom: 10,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: visible.length ? 10 : 0,
         }}
       >
-        {instructor.instructor_name || "Eğitmen"}
-      </Text>
-      <View style={{ gap: 6 }}>
-        {instructor.slots.map((s) => (
-          <SlotRow
-            key={s.slot_time}
-            slot={s}
-            onAdd={() => onAdd(s.slot_time)}
-            onOpen={() => onOpen(s)}
-          />
-        ))}
+        <Text
+          style={{
+            color: adminTheme.text,
+            fontFamily: adminTheme.fontTitle,
+            fontSize: 14,
+          }}
+        >
+          {instructor.instructor_name || "Eğitmen"}
+        </Text>
+        <Text
+          style={{
+            color: adminTheme.textMuted,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+          }}
+        >
+          {bookedCount} ders · {freeCount} boş
+          {blockedCount ? ` · ${blockedCount} kapalı` : ""}
+        </Text>
       </View>
+      {visible.length === 0 ? (
+        <Text
+          style={{
+            color: adminTheme.textDim,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 12,
+            fontStyle: "italic",
+          }}
+        >
+          Bu güne kayıt yok
+        </Text>
+      ) : (
+        <View style={{ gap: 6 }}>
+          {visible.map((s) => (
+            <SlotRow
+              key={s.slot_time}
+              slot={s}
+              onOpen={() => onOpen(s)}
+              spanCount={
+                s.status === "booked"
+                  ? instructor.slots.filter(
+                      (x) => x.status === "booked" && x.booking_id === s.booking_id,
+                    ).length
+                  : 1
+              }
+            />
+          ))}
+        </View>
+      )}
     </AdminCard>
   );
 }
 
 function SlotRow({
   slot,
-  onAdd,
   onOpen,
+  spanCount,
 }: {
   slot: SchoolCalendarSlot;
-  onAdd: () => void;
   onOpen: () => void;
+  spanCount: number;
 }) {
-  const isAvailable = slot.status === "available";
   const isBlocked = slot.status === "manual";
-  const isBooked = slot.status === "booked";
-  const isManualBooking = isBooked && slot.source === "manual";
-  const isOnlineBooking = isBooked && slot.source === "online";
+  const isManualBooking = slot.source === "manual";
 
   const studentLabel =
     slot.students && slot.students.length > 0
@@ -315,9 +388,16 @@ function SlotRow({
           .join(", ")
       : null;
 
+  const lastSlotIdx = TIME_SLOTS.findIndex((t) => t.id === slot.slot_time);
+  const endLabel =
+    spanCount > 1 && lastSlotIdx >= 0
+      ? TIME_SLOTS[Math.min(lastSlotIdx + spanCount - 1, TIME_SLOTS.length - 1)]
+          .end
+      : null;
+
   return (
     <Pressable
-      onPress={isAvailable ? onAdd : isBooked ? onOpen : undefined}
+      onPress={isBlocked ? undefined : onOpen}
       disabled={isBlocked}
       style={{
         flexDirection: "row",
@@ -326,19 +406,17 @@ function SlotRow({
         paddingVertical: 10,
         paddingHorizontal: 12,
         borderRadius: adminTheme.radiusSm,
-        backgroundColor: isAvailable
+        backgroundColor: isBlocked
           ? adminTheme.surfaceMuted
-          : isBlocked
-            ? adminTheme.surfaceMuted
-            : isManualBooking
-              ? adminTheme.warningSoft
-              : adminTheme.accentSoft,
+          : isManualBooking
+            ? adminTheme.warningSoft
+            : adminTheme.accentSoft,
         borderWidth: 1,
         borderColor: adminTheme.border,
         opacity: isBlocked ? 0.55 : 1,
       }}
     >
-      <View style={{ width: 80 }}>
+      <View style={{ width: 88 }}>
         <Text
           style={{
             color: adminTheme.text,
@@ -346,50 +424,24 @@ function SlotRow({
             fontSize: 12,
           }}
         >
-          {slotLabel(slot.slot_time)}
+          {slot.slot_time}
+          {endLabel ? ` – ${endLabel}` : ""}
         </Text>
+        {!endLabel ? (
+          <Text
+            style={{
+              color: adminTheme.textDim,
+              fontFamily: adminTheme.fontBody,
+              fontSize: 10,
+              marginTop: 2,
+            }}
+          >
+            {slotLabel(slot.slot_time).split(" – ")[1] ?? ""}
+          </Text>
+        ) : null}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        {isBooked ? (
-          slot.is_first_slot ? (
-            <>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: adminTheme.text,
-                  fontFamily: adminTheme.fontTitle,
-                  fontSize: 12,
-                }}
-              >
-                {slot.customer_name || "—"}
-              </Text>
-              {studentLabel ? (
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: adminTheme.textMuted,
-                    fontFamily: adminTheme.fontBody,
-                    fontSize: 11,
-                    marginTop: 2,
-                  }}
-                >
-                  {slot.student_count} öğrenci · {studentLabel}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Text
-              style={{
-                color: adminTheme.textDim,
-                fontFamily: adminTheme.fontBody,
-                fontSize: 11,
-                fontStyle: "italic",
-              }}
-            >
-              ↑ aynı ders devam
-            </Text>
-          )
-        ) : (
+        {isBlocked ? (
           <Text
             style={{
               color: adminTheme.textDim,
@@ -397,16 +449,42 @@ function SlotRow({
               fontSize: 12,
             }}
           >
-            {isBlocked ? "Eğitmen kapattı" : "Boş"}
+            Eğitmen kapattı
           </Text>
+        ) : (
+          <>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: adminTheme.text,
+                fontFamily: adminTheme.fontTitle,
+                fontSize: 12,
+              }}
+            >
+              {slot.customer_name || "—"}
+            </Text>
+            {studentLabel ? (
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: adminTheme.textMuted,
+                  fontFamily: adminTheme.fontBody,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                {slot.student_count} öğrenci · {studentLabel}
+              </Text>
+            ) : null}
+          </>
         )}
       </View>
-      {isManualBooking && slot.is_first_slot ? (
-        <AdminPill label="Manuel" tone="warning" size="sm" />
-      ) : isOnlineBooking && slot.is_first_slot ? (
-        <AdminPill label="Online" tone="info" size="sm" />
-      ) : isAvailable ? (
-        <Feather name="plus-circle" size={18} color={adminTheme.accent} />
+      {!isBlocked ? (
+        <AdminPill
+          label={isManualBooking ? "Manuel" : "Online"}
+          tone={isManualBooking ? "warning" : "info"}
+          size="sm"
+        />
       ) : null}
     </Pressable>
   );
@@ -560,26 +638,17 @@ function Field({
 type StudentDraft = { firstName: string; lastName: string; age: string };
 
 function ManualBookingModal({
-  date,
-  instructor,
-  startSlotTime,
+  initialDate,
   onClose,
   onSaved,
 }: {
-  date: string;
-  instructor: SchoolCalendarInstructor;
-  startSlotTime: string;
+  initialDate: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const availableTimes = useMemo(
-    () =>
-      instructor.slots
-        .filter((s) => s.status === "available")
-        .map((s) => s.slot_time),
-    [instructor],
-  );
-  const [selectedTimes, setSelectedTimes] = useState<string[]>([startSlotTime]);
+  const [date, setDate] = useState<string>(initialDate);
+  const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
+  const [instructorId, setInstructorId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -588,6 +657,50 @@ function ManualBookingModal({
     { firstName: "", lastName: "", age: "" },
   ]);
   const [saving, setSaving] = useState(false);
+
+  // Pull the day's calendar so we can show which instructors are free
+  // for the chosen slot set.
+  const { data: dayData, isLoading: loadingDay } = useQuery({
+    queryKey: ["school-calendar", date],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("school_day_calendar", {
+        p_date: date,
+      });
+      if (error) throw error;
+      return data as SchoolCalendarDay;
+    },
+  });
+
+  // 7-day strip starting from today for date picking inside the modal.
+  const dateOptions = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Array.from({ length: 14 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      return d;
+    });
+  }, []);
+
+  // Eligible instructors: free for every selected slot on this date.
+  const eligibleInstructors = useMemo(() => {
+    if (!dayData) return [];
+    if (selectedTimes.length === 0) return dayData.instructors;
+    return dayData.instructors.filter((ins) =>
+      selectedTimes.every((t) => {
+        const slot = ins.slots.find((s) => s.slot_time === t);
+        return slot && slot.status === "available";
+      }),
+    );
+  }, [dayData, selectedTimes]);
+
+  // Reset chosen instructor if they become ineligible after a slot/date change.
+  useEffect(() => {
+    if (!instructorId) return;
+    if (!eligibleInstructors.some((i) => i.instructor_id === instructorId)) {
+      setInstructorId(null);
+    }
+  }, [eligibleInstructors, instructorId]);
 
   function toggleSlot(t: string) {
     setSelectedTimes((cur) =>
@@ -604,6 +717,10 @@ function ManualBookingModal({
       Alert.alert("Eksik", "En az bir seans seç.");
       return;
     }
+    if (!instructorId) {
+      Alert.alert("Eksik", "Eğitmen seç.");
+      return;
+    }
     const studentPayload = students
       .filter((s) => s.firstName.trim() || s.lastName.trim())
       .map((s) => ({
@@ -618,7 +735,7 @@ function ManualBookingModal({
     }
     setSaving(true);
     const { error } = await supabase.rpc("school_create_manual_booking", {
-      p_instructor: instructor.instructor_id,
+      p_instructor: instructorId,
       p_date: date,
       p_slot_times: selectedTimes,
       p_students: studentPayload,
@@ -642,42 +759,91 @@ function ManualBookingModal({
           style={modalStyles.sheet}
           onPress={(e) => e.stopPropagation()}
         >
-          <ScrollView contentContainerStyle={{ gap: 12 }}>
+          <ScrollView contentContainerStyle={{ gap: 14 }}>
             <Text
               style={{
                 color: adminTheme.text,
                 fontFamily: adminTheme.fontHeadline,
-                fontSize: 18,
+                fontSize: 20,
                 letterSpacing: -0.3,
               }}
             >
-              Manuel Rezervasyon
-            </Text>
-            <Text
-              style={{
-                color: adminTheme.textMuted,
-                fontFamily: adminTheme.fontBody,
-                fontSize: 12,
-              }}
-            >
-              {instructor.instructor_name} ·{" "}
-              {new Date(date).toLocaleDateString("tr-TR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
+              Yeni Rezervasyon
             </Text>
 
             <View>
-              <Text style={modalStyles.sectionLabel}>Seanslar</Text>
+              <Text style={modalStyles.sectionLabel}>Tarih</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6 }}
+              >
+                {dateOptions.map((d) => {
+                  const iso = isoDate(d);
+                  const sel = iso === date;
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => setDate(iso)}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: adminTheme.radiusSm,
+                        backgroundColor: sel
+                          ? adminTheme.accent
+                          : adminTheme.surfaceMuted,
+                        borderWidth: 1,
+                        borderColor: sel
+                          ? adminTheme.accent
+                          : adminTheme.border,
+                        alignItems: "center",
+                        minWidth: 52,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: sel ? "#fff" : adminTheme.textMuted,
+                          fontFamily: adminTheme.fontTitle,
+                          fontSize: 9,
+                          letterSpacing: 0.6,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {dayShort(d)}
+                      </Text>
+                      <Text
+                        style={{
+                          color: sel ? "#fff" : adminTheme.text,
+                          fontFamily: adminTheme.fontHeadline,
+                          fontSize: 16,
+                          marginTop: 1,
+                        }}
+                      >
+                        {d.getDate()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View>
+              <Text style={modalStyles.sectionLabel}>Seanslar *</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                 {TIME_SLOTS.map((t) => {
-                  const ok = availableTimes.includes(t.id);
                   const sel = selectedTimes.includes(t.id);
+                  // A slot is "any free" if at least one instructor is
+                  // available for it on this date.
+                  const anyFree = (dayData?.instructors ?? []).some(
+                    (ins) =>
+                      ins.slots.find((s) => s.slot_time === t.id)?.status ===
+                      "available",
+                  );
+                  const disabled = !anyFree && !sel;
                   return (
                     <Pressable
                       key={t.id}
-                      disabled={!ok}
+                      disabled={disabled}
                       onPress={() => toggleSlot(t.id)}
                       style={{
                         paddingHorizontal: 10,
@@ -689,10 +855,8 @@ function ManualBookingModal({
                           : adminTheme.border,
                         backgroundColor: sel
                           ? adminTheme.accent
-                          : ok
-                            ? adminTheme.surfaceMuted
-                            : "transparent",
-                        opacity: ok ? 1 : 0.4,
+                          : adminTheme.surfaceMuted,
+                        opacity: disabled ? 0.35 : 1,
                       }}
                     >
                       <Text
@@ -708,6 +872,68 @@ function ManualBookingModal({
                   );
                 })}
               </View>
+            </View>
+
+            <View>
+              <Text style={modalStyles.sectionLabel}>Eğitmen *</Text>
+              {loadingDay ? (
+                <Text style={modalStyles.helperText}>Yükleniyor…</Text>
+              ) : selectedTimes.length === 0 ? (
+                <Text style={modalStyles.helperText}>
+                  Önce seans seç. Uygun eğitmenler burada listelenecek.
+                </Text>
+              ) : eligibleInstructors.length === 0 ? (
+                <Text
+                  style={[modalStyles.helperText, { color: adminTheme.danger }]}
+                >
+                  Seçilen saatlerde uygun eğitmen yok.
+                </Text>
+              ) : (
+                <View style={{ gap: 6 }}>
+                  {eligibleInstructors.map((ins) => {
+                    const sel = ins.instructor_id === instructorId;
+                    return (
+                      <Pressable
+                        key={ins.instructor_id}
+                        onPress={() => setInstructorId(ins.instructor_id)}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          paddingHorizontal: 12,
+                          paddingVertical: 10,
+                          borderRadius: adminTheme.radiusSm,
+                          borderWidth: 1,
+                          borderColor: sel
+                            ? adminTheme.accent
+                            : adminTheme.border,
+                          backgroundColor: sel
+                            ? adminTheme.accentSoft
+                            : adminTheme.surfaceMuted,
+                        }}
+                      >
+                        <Feather
+                          name={sel ? "check-circle" : "circle"}
+                          size={16}
+                          color={
+                            sel ? adminTheme.accent : adminTheme.textMuted
+                          }
+                        />
+                        <Text
+                          style={{
+                            flex: 1,
+                            color: adminTheme.text,
+                            fontFamily: adminTheme.fontTitle,
+                            fontSize: 13,
+                          }}
+                        >
+                          {ins.instructor_name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             <AdminInput
@@ -876,6 +1102,11 @@ const modalStyles = {
     textTransform: "uppercase" as const,
     letterSpacing: 0.6,
     marginBottom: 6,
+  },
+  helperText: {
+    color: adminTheme.textDim,
+    fontFamily: adminTheme.fontBody,
+    fontSize: 12,
   },
   smallInput: {
     flex: 1,

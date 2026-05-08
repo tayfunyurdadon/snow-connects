@@ -287,11 +287,17 @@ Backend (`supabase/migrations/2026_05_phase9_manual_bookings.sql`):
 Frontend:
 
 - `(school)/(tabs)/bookings.tsx` is now the unified Takvim screen
-  (calendar icon, header "Günlük Takvim"). 14-day date strip, per
-  instructor card, 8 slot rows showing customer + student names + Manuel
-  / Online pill. Tap an empty slot → manual booking modal (multi-slot
-  selection, customer name/phone, students, optional price + notes).
-  Tap a booked slot → detail modal with delete action for manual ones.
+  (calendar icon, header "Günlük Takvim"). 14-day date strip, then a
+  single **"Yeni Rezervasyon"** button that opens the centralized
+  manual-booking modal — and **read-only** instructor cards beneath
+  showing only that day's actual bookings (and any blocked slots).
+  Each booked entry collapses multi-hour lessons into one row
+  (`09:00 – 11:50`) with customer + student names + Manuel/Online pill.
+  Tap a booked entry → detail modal with delete action for manual ones.
+- The new-reservation modal is centralized: pick date → pick slot(s) →
+  the eğitmen list is filtered live to those free for every chosen slot
+  (`school_day_calendar` is reused for availability) → fill customer +
+  students → save. Slots that no instructor is free for are disabled.
 
 The phase9 migration must be pasted into the Supabase SQL editor before
 the Takvim tab works.
