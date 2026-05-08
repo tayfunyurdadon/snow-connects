@@ -18,15 +18,24 @@ import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "lesson-reminder-ids";
 
+// expo-notifications has no web implementation. Calling any of its
+// methods on web throws "UnavailabilityError". We short-circuit every
+// public function below when running on web so the customer flow
+// (booking → payment) keeps working in the Replit web preview and on
+// any future web build. Mobile (iOS/Android) behaviour is unchanged.
+const IS_WEB = Platform.OS === "web";
+
 // Foreground behaviour: show banner + sound when the user is in-app.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+if (!IS_WEB) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 async function ensureAndroidChannel() {
   if (Platform.OS !== "android") return;
@@ -41,6 +50,7 @@ async function ensureAndroidChannel() {
 // Called lazily right before we try to schedule, so users don't see a
 // permission prompt the moment they open the app.
 export async function ensureNotificationPermission(): Promise<boolean> {
+  if (IS_WEB) return false;
   const settings = await Notifications.getPermissionsAsync();
   if (
     settings.granted ||
@@ -117,6 +127,7 @@ interface ScheduleArgs {
 export async function scheduleLessonReminders(
   args: ScheduleArgs,
 ): Promise<void> {
+  if (IS_WEB) return;
   const ok = await ensureNotificationPermission();
   if (!ok) return;
 
@@ -172,6 +183,7 @@ export async function scheduleLessonReminders(
 }
 
 export async function cancelLessonReminders(bookingId: string): Promise<void> {
+  if (IS_WEB) return;
   const map = await readStored();
   const ids = map[bookingId];
   if (!ids || ids.length === 0) return;
