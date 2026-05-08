@@ -2728,6 +2728,7 @@ grant execute on function admin_stats() to authenticated;
 -- 6. admin_update_config: extend signature with bank rate + flat fee
 ------------------------------------------------------------
 drop function if exists admin_update_config(numeric, numeric, smallint, smallint, smallint, smallint);
+drop function if exists admin_update_config(numeric, numeric, smallint, smallint, smallint, smallint, numeric, integer);
 
 create or replace function admin_update_config(
   p_vat_rate numeric,
@@ -2736,8 +2737,8 @@ create or replace function admin_update_config(
   p_season_start_day smallint,
   p_season_end_month smallint,
   p_season_end_day smallint,
-  p_bank_commission_rate numeric,
-  p_transaction_fee_kurus integer
+  p_bank_commission_rate numeric default 0.04,
+  p_transaction_fee_kurus integer default 10000
 ) returns void language plpgsql security definer set search_path = public as $$
 begin
   if not exists(select 1 from public.users where id = auth.uid() and role = 'admin') then
