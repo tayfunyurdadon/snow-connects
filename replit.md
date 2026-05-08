@@ -302,6 +302,44 @@ Frontend:
 The phase9 migration must be pasted into the Supabase SQL editor before
 the Takvim tab works.
 
+### Revenue split (Phase 9b)
+
+Each ski school splits revenue between instructor and school. Default is
+**35% instructor / 65% school**. The school admin changes the rate from
+the Profil tab.
+
+Backend (`supabase/migrations/2026_05_phase9b_instructor_share.sql`):
+
+- `ski_schools.instructor_share_rate numeric default 0.35
+  check (>=0 and <=1)`.
+- Manual bookings now also create a `payouts` row (status='released',
+  release_date=lesson_date, recipient='school'). Without this, manual
+  income would be invisible in the Gelirler split. Skipped only when the
+  manual booking has no price entered.
+- `school_create_manual_booking` and `school_delete_manual_booking`
+  updated in-place; signatures unchanged. Delete also removes the
+  paired payout row.
+- `school_payouts_summary` now returns `instructorShareRate` plus split
+  totals (`pendingInstructorKurus`, `pendingSchoolKurus`,
+  `releasedInstructorKurus`, `releasedSchoolKurus`).
+- New `school_instructor_breakdown()` RPC returns per-instructor totals
+  (lesson count, gross, instructor share, school share).
+- New `school_update_share_rate(p_rate numeric)` RPC for the Profil tab.
+
+Frontend:
+
+- Gelirler tab: top card shows total revenue with a stacked split bar
+  (school vs instructor) + two split tiles. Below that the existing
+  Bekleyen / Tahsil edildi tiles, then a per-instructor breakdown card
+  (lesson count, total, instructor share), then the per-payout history
+  with each row tagged Online / Manuel and an "Eğitmen X TL" pill.
+- Profil tab: new "Gelir Paylaşımı" card with a percentage input. Shows
+  live preview of the split. Save runs `school_update_profile` and
+  `school_update_share_rate` together.
+
+Apply `2026_05_phase9b_instructor_share.sql` in the Supabase SQL editor
+before the new Gelirler split / Profil oran alanı work.
+
 ### Disputes (refunds workflow)
 
 Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`

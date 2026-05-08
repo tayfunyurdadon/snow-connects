@@ -10,7 +10,31 @@ export interface SkiSchool {
   iban_holder_name: string;
   admin_user_id: string | null;
   status: "active" | "blocked";
+  instructor_share_rate: number;
   created_at: string;
+}
+
+export interface SchoolPayoutsSummary {
+  instructorShareRate: number;
+  pendingKurus: number;
+  releasedKurus: number;
+  pendingCount: number;
+  releasedCount: number;
+  pendingInstructorKurus: number;
+  pendingSchoolKurus: number;
+  releasedInstructorKurus: number;
+  releasedSchoolKurus: number;
+}
+
+export interface SchoolInstructorBreakdownRow {
+  instructor_id: string;
+  instructor_name: string;
+  lesson_count: number;
+  pending_kurus: number;
+  released_kurus: number;
+  total_kurus: number;
+  instructor_share_kurus: number;
+  school_share_kurus: number;
 }
 
 export type SchoolApprovalStatus = "pending" | "approved" | "rejected";

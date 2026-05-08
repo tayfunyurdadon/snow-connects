@@ -34,6 +34,7 @@ export default function SchoolProfile() {
   const [desc, setDesc] = useState("");
   const [iban, setIban] = useState("");
   const [holder, setHolder] = useState("");
+  const [sharePct, setSharePct] = useState("35");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -42,11 +43,27 @@ export default function SchoolProfile() {
     setDesc(data.description);
     setIban(data.iban);
     setHolder(data.iban_holder_name);
+    setSharePct(String(Math.round((data.instructor_share_rate ?? 0.35) * 100)));
   }, [data]);
 
   async function save() {
+    const pctNum = parseInt(sharePct, 10);
+    if (Number.isNaN(pctNum) || pctNum < 0 || pctNum > 100) {
+      Alert.alert("Hatalı oran", "Eğitmen payı 0 ile 100 arasında olmalı.");
+      return;
+    }
     setSaving(true);
-    const { error } = await supabase.rpc("school_update_profile", {
+    // Save share rate first; if it fails, the profile fields remain
+    // unchanged so the two stay in sync.
+    const rateRes = await supabase.rpc("school_update_share_rate", {
+      p_rate: pctNum / 100,
+    });
+    if (rateRes.error) {
+      setSaving(false);
+      Alert.alert("Hata", rateRes.error.message);
+      return;
+    }
+    const profileRes = await supabase.rpc("school_update_profile", {
       p_name: name,
       p_description: desc,
       p_logo: null,
@@ -54,13 +71,19 @@ export default function SchoolProfile() {
       p_iban_holder_name: holder,
     });
     setSaving(false);
-    if (error) {
-      Alert.alert("Hata", error.message);
+    if (profileRes.error) {
+      Alert.alert("Hata", profileRes.error.message);
       return;
     }
     Alert.alert("Kaydedildi", "Okul profili güncellendi.");
     qc.invalidateQueries({ queryKey: ["school-profile"] });
+    qc.invalidateQueries({ queryKey: ["school-summary"] });
+    qc.invalidateQueries({ queryKey: ["school-instructor-breakdown"] });
   }
+
+  const pctNum = parseInt(sharePct, 10);
+  const schoolPct =
+    Number.isNaN(pctNum) || pctNum < 0 || pctNum > 100 ? null : 100 - pctNum;
 
   if (isLoading) return <AdminScreen><AdminSpinner /></AdminScreen>;
   if (!data)
@@ -102,6 +125,41 @@ export default function SchoolProfile() {
             multiline
           />
         </View>
+      </AdminCard>
+
+      <AdminCard padding={16}>
+        <Text
+          style={{
+            color: adminTheme.textMuted,
+            fontFamily: adminTheme.fontTitle,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            marginBottom: 12,
+          }}
+        >
+          Gelir Paylaşımı
+        </Text>
+        <AdminInput
+          label="Eğitmen payı (%)"
+          value={sharePct}
+          onChangeText={(t) => setSharePct(t.replace(/[^0-9]/g, ""))}
+          keyboardType="number-pad"
+          placeholder="35"
+        />
+        <Text
+          style={{
+            color:
+              schoolPct === null ? adminTheme.danger : adminTheme.textDim,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+            marginTop: 8,
+          }}
+        >
+          {schoolPct === null
+            ? "Oran 0 ile 100 arasında olmalı."
+            : `Eğitmen %${pctNum} · Okul %${schoolPct}. Tüm rezervasyonlara (online + manuel) uygulanır.`}
+        </Text>
       </AdminCard>
 
       <AdminCard padding={16}>
