@@ -260,6 +260,42 @@ The seed script must be run *after* the phase8 migration is applied in
 the Supabase SQL editor — otherwise it fails with "Could not find the
 table 'public.ski_schools'".
 
+### Manual bookings + unified school calendar (Phase 9)
+
+School admins can enter walk-in / phone reservations directly. Online and
+manual bookings live in the same `bookings` table and share the same slot
+locking, so a single calendar shows both.
+
+Backend (`supabase/migrations/2026_05_phase9_manual_bookings.sql`):
+
+- `bookings.source text default 'online' check in ('online','manual')`,
+  `manual_customer_name`, `manual_customer_phone`, `manual_notes`.
+  `customer_id` is now nullable (manual bookings have no app user).
+- RPC `school_create_manual_booking(instructor, date, slot_times[],
+  students json, customer_name, customer_phone, notes, price_kurus)` —
+  validates the instructor belongs to the caller's school, locks slots
+  the same way `create_booking` does, inserts a booking with
+  `source='manual'`, `payment_status='paid'`, and **no payout row** (the
+  school collected the money).
+- RPC `school_delete_manual_booking(id)` — only manual bookings of the
+  caller's school's instructors. Frees the slots.
+- RPC `school_day_calendar(date)` — returns one row per (instructor,
+  slot) for the day with merged booking + students info; used by the
+  Takvim tab.
+- RLS: school admins can read `students` rows of their school's bookings.
+
+Frontend:
+
+- `(school)/(tabs)/bookings.tsx` is now the unified Takvim screen
+  (calendar icon, header "Günlük Takvim"). 14-day date strip, per
+  instructor card, 8 slot rows showing customer + student names + Manuel
+  / Online pill. Tap an empty slot → manual booking modal (multi-slot
+  selection, customer name/phone, students, optional price + notes).
+  Tap a booked slot → detail modal with delete action for manual ones.
+
+The phase9 migration must be pasted into the Supabase SQL editor before
+the Takvim tab works.
+
 ### Disputes (refunds workflow)
 
 Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`

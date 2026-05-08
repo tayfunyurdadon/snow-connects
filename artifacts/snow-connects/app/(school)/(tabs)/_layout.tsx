@@ -50,8 +50,8 @@ export default function SchoolTabsLayout() {
       <Tabs.Screen
         name="bookings"
         options={{
-          title: "Rezervasyonlar",
-          headerTitle: "Rezervasyonlar",
+          title: "Takvim",
+          headerTitle: "Günlük Takvim",
           tabBarIcon: ({ color }) => (
             <Feather name="calendar" size={20} color={color} />
           ),

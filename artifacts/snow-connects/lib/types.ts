@@ -186,8 +186,12 @@ export interface StudentInput {
 
 export interface Booking {
   id: string;
-  customer_id: string;
+  customer_id: string | null;
   instructor_id: string;
+  source?: "online" | "manual";
+  manual_customer_name?: string | null;
+  manual_customer_phone?: string | null;
+  manual_notes?: string | null;
   resort_id: string;
   slot_ids: string[];
   student_count: number;
@@ -245,6 +249,41 @@ export interface Payout {
   status: "pending" | "released" | "cancelled";
   recipient_type: "instructor" | "school";
   recipient_id: string;
+}
+
+// Per-instructor / per-slot row returned by school_day_calendar() RPC.
+export interface SchoolCalendarSlot {
+  slot_time: string;
+  status: "available" | "booked" | "manual";
+  booking_id: string | null;
+  source: "online" | "manual" | null;
+  payment_status: "pending" | "paid" | "failed" | "refunded" | null;
+  lesson_status: "upcoming" | "completed" | "cancelled" | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  student_count: number | null;
+  students:
+    | {
+        first_name: string;
+        last_name: string;
+        age: number;
+        experience_level: string;
+      }[]
+    | null;
+  notes: string | null;
+  total_price: number | null;
+  is_first_slot: boolean;
+}
+
+export interface SchoolCalendarInstructor {
+  instructor_id: string;
+  instructor_name: string;
+  slots: SchoolCalendarSlot[];
+}
+
+export interface SchoolCalendarDay {
+  date: string;
+  instructors: SchoolCalendarInstructor[];
 }
 
 // Admin dashboard summary returned by admin_stats() RPC.

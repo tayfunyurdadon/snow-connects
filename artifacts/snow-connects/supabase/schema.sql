@@ -228,7 +228,9 @@ create index if not exists idx_slots_instructor on time_slots(instructor_id, dat
 ------------------------------------------------------------
 create table if not exists bookings (
   id uuid primary key default uuid_generate_v4(),
-  customer_id uuid not null references users(id) on delete cascade,
+  -- Nullable so manual bookings (entered by school admins for walk-in
+  -- customers) don't require an app-side user account.
+  customer_id uuid references users(id) on delete cascade,
   instructor_id uuid not null references users(id) on delete cascade,
   resort_id uuid not null references resorts(id),
   slot_ids uuid[] not null,
@@ -242,10 +244,15 @@ create table if not exists bookings (
   payment_status text not null default 'pending' check (payment_status in ('pending','paid','failed','refunded')),
   lesson_status text not null default 'upcoming' check (lesson_status in ('upcoming','completed','cancelled')),
   lesson_date date not null,
+  source text not null default 'online' check (source in ('online','manual')),
+  manual_customer_name text,
+  manual_customer_phone text,
+  manual_notes text,
   created_at timestamptz not null default now()
 );
 create index if not exists idx_bookings_customer on bookings(customer_id);
 create index if not exists idx_bookings_instructor on bookings(instructor_id);
+create index if not exists idx_bookings_date_instructor on bookings(lesson_date, instructor_id);
 
 ------------------------------------------------------------
 -- Students

@@ -126,7 +126,14 @@ export default function PaymentsScreen() {
   });
 
   const customerIds = useMemo(
-    () => Array.from(new Set((bookings ?? []).map((b) => b.customer_id))),
+    () =>
+      Array.from(
+        new Set(
+          (bookings ?? [])
+            .map((b) => b.customer_id)
+            .filter((id): id is string => !!id),
+        ),
+      ),
     [bookings],
   );
 
@@ -169,7 +176,8 @@ export default function PaymentsScreen() {
     return {
       ...p,
       booking: b,
-      customerName: b ? customerById.get(b.customer_id) : undefined,
+      customerName:
+        b && b.customer_id ? customerById.get(b.customer_id) : undefined,
       resortName: b ? resortById.get(b.resort_id) : undefined,
       slotTimes: b?.slot_ids,
       derivedStatus: cancelled
