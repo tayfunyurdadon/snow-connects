@@ -214,7 +214,11 @@ function PayoutsTab() {
       p_payout: id,
     });
     if (error) Alert.alert("Hata", error.message);
-    else qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+    else {
+      qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+      // Pano "Bekleyen Ödeme — Eğitmenlere" tutarı da düşmeli.
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+    }
   }
 
   if (isLoading) return <AdminSpinner />;
@@ -320,6 +324,7 @@ function FlagsTab() {
     else {
       qc.invalidateQueries({ queryKey: ["admin-flagged"] });
       qc.invalidateQueries({ queryKey: ["admin-flag-count"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
     }
   }
 
@@ -469,6 +474,7 @@ function DisputesTab() {
             onResolved={() => {
               qc.invalidateQueries({ queryKey: ["admin-disputes"] });
               qc.invalidateQueries({ queryKey: ["admin-dispute-count"] });
+              qc.invalidateQueries({ queryKey: ["admin-stats"] });
             }}
           />
         ))
