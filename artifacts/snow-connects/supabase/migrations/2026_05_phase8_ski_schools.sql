@@ -80,6 +80,20 @@ returns uuid language sql stable security definer set search_path = public as $$
   select s.id from public.ski_schools s where s.admin_user_id = p_user limit 1;
 $$;
 
+-- SECURITY DEFINER helper: is the given user an instructor of the
+-- school administered by the current auth.uid()? Used by the users
+-- RLS policy to avoid recursive policy evaluation between users and
+-- instructor_profiles.
+create or replace function public.is_my_school_instructor(p_user uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists(
+    select 1 from public.instructor_profiles ip
+      join public.ski_schools s on s.id = ip.school_id
+      where ip.user_id = p_user
+        and s.admin_user_id = auth.uid()
+  );
+$$;
+
 ------------------------------------------------------------
 -- 6. RLS for ski_schools
 ------------------------------------------------------------
@@ -107,15 +121,7 @@ create policy "ski_schools_school_admin_self_update" on public.ski_schools
 -- School admins can read users that belong to their school (instructors)
 drop policy if exists "users_school_admin_read" on public.users;
 create policy "users_school_admin_read" on public.users
-  for select using (
-    exists(
-      select 1 from public.instructor_profiles ip
-        join public.ski_schools s on s.id = ip.school_id
-        where ip.user_id = public.users.id
-          and s.admin_user_id = auth.uid()
-    )
-    or id = auth.uid()
-  );
+  for select using ( public.is_my_school_instructor(public.users.id) );
 
 -- School admins can read instructor profiles for their school (including non-approved)
 drop policy if exists "instructor_profiles_school_admin_read" on public.instructor_profiles;
