@@ -340,6 +340,28 @@ Frontend:
 Apply `2026_05_phase9b_instructor_share.sql` in the Supabase SQL editor
 before the new Gelirler split / Profil oran alanı work.
 
+### Hotfix: school instructor bookable (Phase 9c)
+
+`supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
+fixes a customer-blocking bug: instructors registered through the app
+with a school dropdown selection landed with
+`verification_status='pending_documents'` even though their school had
+auto-approved them. `create_booking` then refused with "instructor not
+verified". The migration:
+
+- Backfills `verification_status='approved'` on existing rows where
+  `school_id is not null and school_approval_status='approved'`.
+- Updates `handle_new_user()` so a new instructor with `school_id` in
+  signup metadata lands with `verification_status='approved'` +
+  `school_approval_status='approved'` immediately. Independent
+  instructors still default to `pending_documents`.
+- Loosens `create_booking()`'s verification gate to accept either
+  platform-approved verification or an approved school affiliation
+  (defence in depth).
+
+Apply this migration in the Supabase SQL editor; the booking screen's
+"Onayla" button works again afterwards.
+
 ### Disputes (refunds workflow)
 
 Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`
