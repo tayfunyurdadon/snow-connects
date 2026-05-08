@@ -23,6 +23,10 @@ export default function AppLayout() {
     console.log("[app/_layout] admin detected → /(admin)/(tabs)");
     return <Redirect href="/(admin)/(tabs)" />;
   }
+  if (user?.role === "school_admin") {
+    console.log("[app/_layout] school_admin detected → /(school)/(tabs)");
+    return <Redirect href="/(school)/(tabs)" />;
+  }
 
   return (
     <Stack

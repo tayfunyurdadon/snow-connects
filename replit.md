@@ -201,6 +201,65 @@ fixes the function to insert the payout inline (release date = lesson date
 any already-paid booking that's missing one. `schema.sql` carries the same
 fix for fresh installs.
 
+### Ski schools (Phase 8)
+
+Schools own a roster of instructors and receive payouts to a single school
+IBAN. New role `school_admin` manages a school's instructors and revenue.
+
+Backend lives in `supabase/migrations/2026_05_phase8_ski_schools.sql`:
+
+- New table `ski_schools` (name, slug, description, iban, iban_holder_name,
+  admin_user_id, status).
+- `users.role` check expanded with `school_admin`.
+- `instructor_profiles.school_id` + `school_approval_status` (`pending`,
+  `approved`, `rejected`). Instructors affiliated with a school skip the
+  platform-level `instructor_verification` flow; their school admin
+  approves them instead. `verification_status` is auto-set in lockstep so
+  the existing customer-facing `verification_status='approved'` filter
+  keeps working.
+- `payouts.recipient_type` (`instructor` | `school`) +
+  `payouts.recipient_id`. `create_booking` (test_mode auto-pay path) and
+  `confirm_payment` both route the payout to the school when the
+  instructor has a `school_id`. RLS on `payouts` allows the school admin
+  to read their own school's payouts.
+- `handle_new_user()` trigger reads optional `school_id` from
+  `auth.users.raw_user_meta_data` so an instructor can affiliate at
+  signup time.
+- RPCs: `school_list_instructors`, `school_set_instructor_status`,
+  `school_payouts_summary`, `school_update_profile`, `admin_upsert_school`,
+  `admin_delete_school`, `admin_set_school_status`, `admin_search_users`.
+  All school RPCs check `is_school_admin()`; admin RPCs check
+  `is_admin()`.
+
+Frontend:
+
+- `(school)/(tabs)` route group (gated to `school_admin`) with four tabs:
+  Eğitmenler (approve/reject), Rezervasyonlar, Gelirler (with pending /
+  released summary tiles), Profil (edit name/desc/IBAN).
+- `(auth)/login.tsx` and `(app)/_layout.tsx` redirect `school_admin`
+  users to `/(school)/(tabs)`.
+- `(auth)/register.tsx`: when `Hesap türü = Eğitmen`, an optional
+  "Kayak okulu" dropdown lists active schools. School-affiliated
+  instructors skip the platform verification screen and land in the
+  instructor panel right away.
+- Customer-facing instructor cards (`resort/[id].tsx` and
+  `instructor/[id].tsx`) show a small school badge under the name when
+  the instructor is affiliated.
+- Admin → Sistem → "Okullar" sub-tab provides full CRUD: create / edit /
+  delete schools, search any user by email to assign as the school
+  admin (`admin_search_users`).
+
+Test data (`seed-schools.mjs`, run with `SUPABASE_SECRET_KEY` env):
+
+- `s@snow.com` / `123456` — school_admin of "Snow Academy"
+- `i2@snow.com`, `i3@snow.com`, `i4@snow.com` are attached to Snow
+  Academy with `school_approval_status='approved'`. `i@snow.com` and
+  `i1@snow.com` stay independent (platform-verified) for comparison.
+
+The seed script must be run *after* the phase8 migration is applied in
+the Supabase SQL editor — otherwise it fails with "Could not find the
+table 'public.ski_schools'".
+
 ### Disputes (refunds workflow)
 
 Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`

@@ -149,6 +149,7 @@ function resolveTarget(next: string | undefined, role: string | undefined): stri
   // Admins always land on the admin panel — never the customer app, even if a
   // `next` redirect param is set, since they don't have customer flows.
   if (role === "admin") return "/(admin)/(tabs)";
+  if (role === "school_admin") return "/(school)/(tabs)";
   if (next) return next;
   return "/(app)/(tabs)";
 }

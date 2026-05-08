@@ -1,4 +1,19 @@
-export type UserRole = "customer" | "instructor" | "admin";
+export type UserRole = "customer" | "instructor" | "admin" | "school_admin";
+
+export interface SkiSchool {
+  id: string;
+  name: string;
+  slug: string | null;
+  logo: string;
+  description: string;
+  iban: string;
+  iban_holder_name: string;
+  admin_user_id: string | null;
+  status: "active" | "blocked";
+  created_at: string;
+}
+
+export type SchoolApprovalStatus = "pending" | "approved" | "rejected";
 export type UserStatus = "active" | "blocked" | "pending";
 
 export interface AppUser {
@@ -44,6 +59,8 @@ export interface InstructorProfile {
   review_count: number;
   resort_ids: string[];
   verification_status: VerificationStatus;
+  school_id?: string | null;
+  school_approval_status?: SchoolApprovalStatus;
 }
 
 export type DisputeReason =
@@ -226,6 +243,8 @@ export interface Payout {
   lesson_date: string;
   release_date: string;
   status: "pending" | "released" | "cancelled";
+  recipient_type: "instructor" | "school";
+  recipient_id: string;
 }
 
 // Admin dashboard summary returned by admin_stats() RPC.

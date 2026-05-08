@@ -25,7 +25,9 @@ export default function InstructorDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("instructor_profiles")
-        .select("*, user:users!inner(id, name, email)")
+        .select(
+          "*, user:users!inner(id, name, email), school:ski_schools(id, name, description)",
+        )
         .eq("user_id", id)
         // Defense-in-depth: even if the URL is shared, customers can never
         // open the detail page for a non-approved instructor.
@@ -35,6 +37,7 @@ export default function InstructorDetail() {
       if (!data) return null;
       const row = data as InstructorProfile & {
         user: Pick<AppUser, "id" | "name" | "email">;
+        school?: { id: string; name: string; description: string } | null;
       };
       const { data: resorts } = await supabase
         .from("resorts")
@@ -107,6 +110,28 @@ export default function InstructorDetail() {
           <Text style={[styles.name, { color: c.foreground }]}>
             {data.user.name || "Eğitmen"}
           </Text>
+          {data.school ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+                marginTop: 2,
+              }}
+            >
+              <Feather name="home" size={12} color={c.accentDeep} />
+              <Text
+                style={{
+                  color: c.accentDeep,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 12,
+                  letterSpacing: 0.2,
+                }}
+              >
+                {data.school.name}
+              </Text>
+            </View>
+          ) : null}
           <Text
             style={{
               color: c.mutedForeground,

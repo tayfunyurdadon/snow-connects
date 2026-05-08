@@ -16,7 +16,10 @@ import { pickTierKurus, withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
-type Row = InstructorProfile & { user: Pick<AppUser, "id" | "name"> };
+type Row = InstructorProfile & {
+  user: Pick<AppUser, "id" | "name">;
+  school?: { id: string; name: string } | null;
+};
 
 export default function ResortInstructors() {
   const c = useColors();
@@ -41,7 +44,9 @@ export default function ResortInstructors() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("instructor_profiles")
-        .select("*, user:users!inner(id, name, status, role)")
+        .select(
+          "*, user:users!inner(id, name, status, role), school:ski_schools(id, name)",
+        )
         .contains("resort_ids", [id])
         // Only verified instructors are bookable. RLS already hides
         // unapproved profiles from non-owners, but we filter explicitly so
@@ -52,7 +57,11 @@ export default function ResortInstructors() {
         .filter(
           (r) => r.user.status === "active" && r.user.role === "instructor",
         )
-        .map((r) => ({ ...r, user: { id: r.user.id, name: r.user.name } }));
+        .map((r) => ({
+          ...r,
+          user: { id: r.user.id, name: r.user.name },
+          school: r.school ?? null,
+        }));
     },
     enabled: !!id,
   });
@@ -149,18 +158,35 @@ function InstructorCard({
               gap: 8,
             }}
           >
-            <Text
-              style={{
-                color: c.foreground,
-                fontFamily: "Fraunces_600SemiBold",
-                fontSize: 18,
-                letterSpacing: -0.3,
-                flex: 1,
-              }}
-              numberOfLines={1}
-            >
-              {row.user.name || "Eğitmen"}
-            </Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text
+                style={{
+                  color: c.foreground,
+                  fontFamily: "Fraunces_600SemiBold",
+                  fontSize: 18,
+                  letterSpacing: -0.3,
+                }}
+                numberOfLines={1}
+              >
+                {row.user.name || "Eğitmen"}
+              </Text>
+              {row.school ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Feather name="home" size={11} color={c.accentDeep} />
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: c.accentDeep,
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 11,
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {row.school.name}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           <View style={{ gap: 2 }}>

@@ -14,9 +14,9 @@ import {
 } from "@/components/admin/AdminUI";
 import { adminTheme } from "@/lib/adminTheme";
 import { supabase } from "@/lib/supabase";
-import type { AppConfig, Resort } from "@/lib/types";
+import type { AppConfig, Resort, SkiSchool } from "@/lib/types";
 
-type SubTab = "resorts" | "settings";
+type SubTab = "resorts" | "schools" | "settings";
 
 export default function AdminSystem() {
   const [sub, setSub] = useState<SubTab>("resorts");
@@ -27,11 +27,327 @@ export default function AdminSystem() {
         onChange={setSub}
         options={[
           { id: "resorts", label: "Pistler" },
+          { id: "schools", label: "Okullar" },
           { id: "settings", label: "Ayarlar" },
         ]}
       />
-      {sub === "resorts" ? <ResortsTab /> : <SettingsTab />}
+      {sub === "resorts" ? (
+        <ResortsTab />
+      ) : sub === "schools" ? (
+        <SchoolsTab />
+      ) : (
+        <SettingsTab />
+      )}
     </AdminScreen>
+  );
+}
+
+type SchoolEdit = {
+  id?: string;
+  name: string;
+  description: string;
+  iban: string;
+  iban_holder_name: string;
+  admin_user_id: string | null;
+  admin_label?: string;
+};
+
+function SchoolsTab() {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<SchoolEdit | null>(null);
+  const [adminQ, setAdminQ] = useState("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-schools"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ski_schools")
+        .select("*, admin:users!admin_user_id(name, email)")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as (SkiSchool & {
+        admin: { name: string | null; email: string | null } | null;
+      })[];
+    },
+  });
+
+  const adminSearch = useQuery({
+    enabled: !!editing,
+    queryKey: ["admin-search-users", adminQ],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_search_users", {
+        p_query: adminQ,
+      });
+      if (error) throw error;
+      return (data ?? []) as {
+        id: string;
+        name: string | null;
+        email: string | null;
+        role: string;
+      }[];
+    },
+  });
+
+  async function save() {
+    if (!editing) return;
+    if (!editing.name.trim()) {
+      Alert.alert("Hata", "Okul adı zorunlu.");
+      return;
+    }
+    const { error } = await supabase.rpc("admin_upsert_school", {
+      p_id: editing.id ?? null,
+      p_name: editing.name,
+      p_description: editing.description,
+      p_iban: editing.iban,
+      p_iban_holder_name: editing.iban_holder_name,
+      p_admin_user_id: editing.admin_user_id,
+    });
+    if (error) {
+      Alert.alert("Hata", error.message);
+      return;
+    }
+    setEditing(null);
+    qc.invalidateQueries({ queryKey: ["admin-schools"] });
+  }
+
+  async function remove(id: string) {
+    Alert.alert("Okulu sil", "Bu okul silinecek. Devam edilsin mi?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Sil",
+        style: "destructive",
+        onPress: async () => {
+          const { error } = await supabase.rpc("admin_delete_school", {
+            p_id: id,
+          });
+          if (error) Alert.alert("Hata", error.message);
+          else qc.invalidateQueries({ queryKey: ["admin-schools"] });
+        },
+      },
+    ]);
+  }
+
+  return (
+    <>
+      <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+        <AdminButton
+          label="Okul Ekle"
+          icon="plus"
+          size="sm"
+          onPress={() =>
+            setEditing({
+              name: "",
+              description: "",
+              iban: "",
+              iban_holder_name: "",
+              admin_user_id: null,
+            })
+          }
+        />
+      </View>
+
+      {editing ? (
+        <AdminCard padding={14}>
+          <Text
+            style={{
+              color: adminTheme.textMuted,
+              fontFamily: adminTheme.fontTitle,
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.6,
+              marginBottom: 10,
+            }}
+          >
+            {editing.id ? "Okulu Düzenle" : "Yeni Okul"}
+          </Text>
+          <View style={{ gap: 10 }}>
+            <AdminInput
+              label="Ad"
+              value={editing.name}
+              onChangeText={(t) => setEditing({ ...editing, name: t })}
+              placeholder="Snow Academy"
+            />
+            <AdminInput
+              label="Açıklama"
+              value={editing.description}
+              onChangeText={(t) =>
+                setEditing({ ...editing, description: t })
+              }
+              multiline
+            />
+            <AdminInput
+              label="IBAN"
+              value={editing.iban}
+              onChangeText={(t) => setEditing({ ...editing, iban: t })}
+              autoCapitalize="characters"
+            />
+            <AdminInput
+              label="Hesap sahibi"
+              value={editing.iban_holder_name}
+              onChangeText={(t) =>
+                setEditing({ ...editing, iban_holder_name: t })
+              }
+            />
+            <AdminInput
+              label="Okul yöneticisi (e-posta ile ara)"
+              value={adminQ}
+              onChangeText={setAdminQ}
+              autoCapitalize="none"
+              placeholder="ornek@mail.com"
+            />
+            {editing.admin_user_id ? (
+              <Text
+                style={{
+                  color: adminTheme.success,
+                  fontFamily: adminTheme.fontBody,
+                  fontSize: 12,
+                }}
+              >
+                Seçili: {editing.admin_label ?? editing.admin_user_id}
+              </Text>
+            ) : null}
+            <View style={{ gap: 6, maxHeight: 220 }}>
+              {(adminSearch.data ?? []).slice(0, 6).map((u) => (
+                <Pressable
+                  key={u.id}
+                  onPress={() =>
+                    setEditing({
+                      ...editing,
+                      admin_user_id: u.id,
+                      admin_label: u.email ?? u.name ?? u.id,
+                    })
+                  }
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: adminTheme.radiusSm,
+                    backgroundColor:
+                      editing.admin_user_id === u.id
+                        ? adminTheme.accentSoft
+                        : adminTheme.surfaceMuted,
+                    borderWidth: 1,
+                    borderColor: adminTheme.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: adminTheme.text,
+                      fontFamily: adminTheme.fontBody,
+                      fontSize: 12,
+                    }}
+                  >
+                    {u.email ?? u.name ?? u.id}
+                  </Text>
+                  <Text
+                    style={{
+                      color: adminTheme.textDim,
+                      fontFamily: adminTheme.fontBody,
+                      fontSize: 10,
+                    }}
+                  >
+                    {u.role}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+              <View style={{ flex: 1 }}>
+                <AdminButton
+                  label="Vazgeç"
+                  tone="ghost"
+                  onPress={() => setEditing(null)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AdminButton label="Kaydet" onPress={save} />
+              </View>
+            </View>
+          </View>
+        </AdminCard>
+      ) : null}
+
+      {isLoading ? (
+        <AdminSpinner />
+      ) : !data || data.length === 0 ? (
+        <AdminEmpty icon="home" title="Henüz okul yok" />
+      ) : (
+        data.map((s) => (
+          <AdminCard key={s.id}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: adminTheme.text,
+                    fontFamily: adminTheme.fontTitle,
+                    fontSize: 14,
+                  }}
+                >
+                  {s.name}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: adminTheme.textMuted,
+                    fontFamily: adminTheme.fontBody,
+                    fontSize: 12,
+                    marginTop: 2,
+                  }}
+                >
+                  Yönetici: {s.admin?.email ?? s.admin?.name ?? "—"}
+                </Text>
+                {s.iban ? (
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: adminTheme.textDim,
+                      fontFamily: adminTheme.fontBody,
+                      fontSize: 11,
+                      marginTop: 2,
+                    }}
+                  >
+                    {s.iban}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <AdminButton
+                  label="Düzenle"
+                  size="sm"
+                  tone="ghost"
+                  icon="edit-2"
+                  onPress={() =>
+                    setEditing({
+                      id: s.id,
+                      name: s.name,
+                      description: s.description,
+                      iban: s.iban,
+                      iban_holder_name: s.iban_holder_name,
+                      admin_user_id: s.admin_user_id,
+                      admin_label:
+                        s.admin?.email ?? s.admin?.name ?? undefined,
+                    })
+                  }
+                />
+                <AdminButton
+                  label="Sil"
+                  size="sm"
+                  tone="danger"
+                  icon="trash-2"
+                  onPress={() => remove(s.id)}
+                />
+              </View>
+            </View>
+          </AdminCard>
+        ))
+      )}
+    </>
   );
 }
 
