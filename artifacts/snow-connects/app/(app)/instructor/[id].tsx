@@ -18,7 +18,10 @@ import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 export default function InstructorDetail() {
   const c = useColors();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, resort: resortFromQuery } = useLocalSearchParams<{
+    id: string;
+    resort?: string;
+  }>();
 
   const { data, isLoading } = useQuery({
     queryKey: ["instructor", id],
@@ -373,7 +376,13 @@ export default function InstructorDetail() {
           iconRight={
             <Feather name="arrow-right" size={18} color={c.accentForeground} />
           }
-          onPress={() => router.push(`/(app)/dates/${data.user_id}` as never)}
+          onPress={() =>
+            router.push(
+              (resortFromQuery
+                ? `/(app)/dates/${data.user_id}?resort=${resortFromQuery}`
+                : `/(app)/dates/${data.user_id}`) as never,
+            )
+          }
         />
       </View>
     </Screen>

@@ -98,7 +98,11 @@ export default function ResortInstructors() {
               <InstructorCard
                 key={p.user_id}
                 row={p}
-                onPress={() => router.push(`/(app)/instructor/${p.user_id}`)}
+                onPress={() =>
+                  router.push(
+                    `/(app)/instructor/${p.user_id}?resort=${id}` as never,
+                  )
+                }
               />
             ))}
           </View>

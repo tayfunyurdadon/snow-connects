@@ -19,12 +19,17 @@ import type { AppUser, InstructorProfile } from "@/lib/types";
 export default function DateRangePicker() {
   const c = useColors();
   const router = useRouter();
-  const { instructorId, from: initialFrom, to: initialTo } =
-    useLocalSearchParams<{
-      instructorId: string;
-      from?: string;
-      to?: string;
-    }>();
+  const {
+    instructorId,
+    from: initialFrom,
+    to: initialTo,
+    resort: resortFromQuery,
+  } = useLocalSearchParams<{
+    instructorId: string;
+    from?: string;
+    to?: string;
+    resort?: string;
+  }>();
 
   const [from, setFrom] = useState<string | null>(initialFrom ?? null);
   const [to, setTo] = useState<string | null>(initialTo ?? null);
@@ -56,7 +61,10 @@ export default function DateRangePicker() {
 
   function onConfirm() {
     if (!canContinue) return;
-    router.push(`/(app)/book/${instructorId}?from=${from}&to=${to}` as never);
+    const resortQS = resortFromQuery ? `&resort=${resortFromQuery}` : "";
+    router.push(
+      `/(app)/book/${instructorId}?from=${from}&to=${to}${resortQS}` as never,
+    );
   }
 
   function onClear() {

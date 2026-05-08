@@ -82,10 +82,12 @@ export default function BookScreen() {
     instructorId,
     from: rangeFrom,
     to: rangeTo,
+    resort: resortFromQuery,
   } = useLocalSearchParams<{
     instructorId: string;
     from?: string;
     to?: string;
+    resort?: string;
   }>();
   const { session, loading: authLoading } = useAuth();
 
@@ -230,11 +232,21 @@ export default function BookScreen() {
     }
   }, [slotIndex, selectedKeys]);
 
+  // Auto-pick the resort: prefer the one the user came from (query
+  // param), otherwise the first one the instructor teaches at. The
+  // separate picker UI on this screen has been removed — the resort is
+  // already chosen earlier in the flow (resort → instructor → dates →
+  // book).
   useEffect(() => {
-    if (resorts && resorts.length === 1 && !resortId) {
+    if (resortId) return;
+    if (resortFromQuery && resorts?.some((r) => r.id === resortFromQuery)) {
+      setResortId(resortFromQuery);
+      return;
+    }
+    if (resorts && resorts.length > 0) {
       setResortId(resorts[0].id);
     }
-  }, [resorts, resortId]);
+  }, [resorts, resortId, resortFromQuery]);
 
   useEffect(() => {
     setStudents((prev) => {
@@ -313,16 +325,8 @@ export default function BookScreen() {
   }
 
   async function submit() {
-    console.log("[book] submit pressed", {
-      resortId,
-      selectedKeys,
-      students,
-      hasSession: !!session,
-      authLoading,
-    });
     const err = validate();
     if (err) {
-      console.log("[book] validation failed:", err);
       if (typeof window !== "undefined" && typeof window.alert === "function") {
         window.alert(`Eksik bilgi: ${err}`);
       } else {
@@ -377,7 +381,6 @@ export default function BookScreen() {
       });
       if (error) {
         setSubmitting(false);
-        console.log("[book] create_booking error:", error);
         const friendly = translateError(error.message);
         if (createdIds.length === 0) {
           if (typeof window !== "undefined" && typeof window.alert === "function") {
@@ -500,41 +503,6 @@ export default function BookScreen() {
           </Pressable>
         </View>
       </Card>
-
-      {(resorts ?? []).length > 1 ? (
-        <View style={{ gap: 6 }}>
-          <Text style={[styles.h, { color: c.foreground }]}>Pist</Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {(resorts ?? []).map((r) => {
-              const active = r.id === resortId;
-              return (
-                <Pressable
-                  key={r.id}
-                  onPress={() => setResortId(r.id)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    borderRadius: 999,
-                    borderWidth: 1.5,
-                    borderColor: active ? c.accent : c.borderSoft,
-                    backgroundColor: active ? c.accentSoft : c.card,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: active ? c.accentDeep : c.foreground,
-                      fontFamily: "Inter_600SemiBold",
-                      fontSize: 13,
-                    }}
-                  >
-                    {r.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
 
       <View style={{ gap: 8 }}>
         <Text style={[styles.h, { color: c.foreground }]}>Saatleri seç</Text>
