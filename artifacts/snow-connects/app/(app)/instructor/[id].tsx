@@ -11,7 +11,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
 import { formatTRY } from "@/lib/format";
-import { pickTierKurus, withVat } from "@/lib/pricing";
+import { effectiveTieredProfile, pickTierKurus, withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
@@ -29,7 +29,7 @@ export default function InstructorDetail() {
       const { data, error } = await supabase
         .from("instructor_profiles")
         .select(
-          "*, user:users!inner(id, name, email), school:ski_schools(id, name, description)",
+          "*, user:users!inner(id, name, email), school:ski_schools(id, name, description, price_1_kurus, price_2_kurus, price_3_kurus, price_4plus_kurus)",
         )
         .eq("user_id", id)
         // Defense-in-depth: even if the URL is shared, customers can never
@@ -40,7 +40,15 @@ export default function InstructorDetail() {
       if (!data) return null;
       const row = data as InstructorProfile & {
         user: Pick<AppUser, "id" | "name" | "email">;
-        school?: { id: string; name: string; description: string } | null;
+        school?: {
+          id: string;
+          name: string;
+          description: string;
+          price_1_kurus: number | null;
+          price_2_kurus: number | null;
+          price_3_kurus: number | null;
+          price_4plus_kurus: number | null;
+        } | null;
       };
       const { data: resorts } = await supabase
         .from("resorts")
@@ -60,12 +68,19 @@ export default function InstructorDetail() {
     );
   }
 
+  // School-affiliated instructors price from their school's tariff
+  // (Phase 10/15). For independents the helper just returns `data`
+  // untouched.
+  const effectiveProfile = effectiveTieredProfile(data, data.school);
   const tiers = [
     { count: 1, label: "1 kişilik ders", suffix: "/saat" },
     { count: 2, label: "2 kişilik ders", suffix: "/kişi" },
     { count: 3, label: "3 kişilik ders", suffix: "/kişi" },
     { count: 4, label: "4+ kişilik ders", suffix: "/kişi" },
-  ].map((t) => ({ ...t, price: withVat(pickTierKurus(data, t.count)) }));
+  ].map((t) => ({
+    ...t,
+    price: withVat(pickTierKurus(effectiveProfile, t.count)),
+  }));
   const headlinePrice = tiers[0].price;
   const initial = (data.user.name || "?").slice(0, 1).toUpperCase();
   const rating = data.rating ?? 5;

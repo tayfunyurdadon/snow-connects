@@ -22,7 +22,7 @@ import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDateShortTR, formatTRY } from "@/lib/format";
-import { calcBreakdown } from "@/lib/pricing";
+import { calcBreakdown, effectiveTieredProfile } from "@/lib/pricing";
 import { isInSeason, isoDate, stripTime } from "@/lib/season";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
@@ -153,11 +153,22 @@ export default function BookScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("instructor_profiles")
-        .select("*")
+        .select(
+          "*, school:ski_schools(price_1_kurus, price_2_kurus, price_3_kurus, price_4plus_kurus)",
+        )
         .eq("user_id", instructorId)
         .maybeSingle();
       if (error) throw error;
-      return data as InstructorProfile | null;
+      return data as
+        | (InstructorProfile & {
+            school?: {
+              price_1_kurus: number | null;
+              price_2_kurus: number | null;
+              price_3_kurus: number | null;
+              price_4plus_kurus: number | null;
+            } | null;
+          })
+        | null;
     },
     enabled: !!instructorId,
   });
@@ -257,13 +268,21 @@ export default function BookScreen() {
     });
   }, [studentCount]);
 
+  // School-affiliated instructors price from their school's tariff
+  // (Phase 10/15). The server enforces the same rule in create_booking
+  // so the customer-facing estimate matches the booked total.
+  const pricingProfile = useMemo(
+    () => effectiveTieredProfile(instructor, instructor?.school ?? null),
+    [instructor],
+  );
+
   const totals = useMemo(
     () =>
-      calcBreakdown(instructor, studentCount, selectedKeys.length, {
+      calcBreakdown(pricingProfile, studentCount, selectedKeys.length, {
         bankCommissionRate: pricingConfig?.bank_commission_rate ?? undefined,
         transactionFeeKurus: pricingConfig?.transaction_fee_kurus ?? undefined,
       }),
-    [instructor, studentCount, selectedKeys.length, pricingConfig],
+    [pricingProfile, studentCount, selectedKeys.length, pricingConfig],
   );
 
   if (isLoading || !instructor || !draftHydrated || !rangeFrom || !rangeTo)

@@ -376,6 +376,39 @@ Backend (`supabase/migrations/2026_05_phase12_manual_payment_status.sql`):
 Apply this migration in the Supabase SQL editor before the new
 "Ödeme Durumu" controls work.
 
+### Effective school pricing (Phase 15)
+
+Phase 10 added per-school tier prices on `ski_schools.price_X_kurus`
+and a `school_update_pricing()` RPC, but `create_booking` and the
+customer-facing screens were never wired to actually read them. As a
+result, school-affiliated instructors showed ₺0 on their public profile
+and bookings were priced from the (empty) `instructor_profiles`
+columns.
+
+Backend (`supabase/migrations/2026_05_phase15_school_pricing_effective.sql`):
+
+- `create_booking()` replaced in-place. Effective tier price now
+  resolves as: school tier (when school-affiliated and `> 0`) →
+  instructor's own tier → legacy `base_price`. Same `coalesce(nullif(...))`
+  pattern per tier so an unset school tier transparently falls back to
+  the instructor's price.
+
+Frontend:
+
+- `lib/pricing.ts` — new `effectiveTieredProfile(profile, school)`
+  helper that overlays a school's tier columns onto an instructor's
+  profile and is reused by both customer-facing screens. Independent
+  instructors get the original profile back unchanged.
+- `app/(app)/instructor/[id].tsx` selects the school's price columns
+  alongside `name`/`description` and runs them through
+  `effectiveTieredProfile` before rendering the price card.
+- `app/(app)/book/[instructorId].tsx` does the same before computing
+  `calcBreakdown`, so the customer-facing estimate exactly matches the
+  server total.
+
+Apply this migration in the Supabase SQL editor before re-testing
+school pricing.
+
 ### School → instructor cash settlements (Phase 14)
 
 School admins can now record bulk cash transfers to their instructors and

@@ -26,6 +26,44 @@ export type TieredProfile = Pick<
   | "price_4_plus_person"
 >;
 
+// Per-tier price columns coming off `ski_schools` (Phase 10). A
+// school-affiliated instructor inherits these instead of using their
+// own per-person prices, mirroring the server-side rule in
+// `create_booking` (Phase 15).
+export interface SchoolPricingTiers {
+  price_1_kurus?: number | null;
+  price_2_kurus?: number | null;
+  price_3_kurus?: number | null;
+  price_4plus_kurus?: number | null;
+}
+
+/**
+ * Merge a school's tier prices onto an instructor's profile. A school
+ * tier overrides the instructor's tier only when set (> 0), so a
+ * school can leave a single tier blank and the instructor's own price
+ * still applies. Returns the original profile unchanged when the
+ * instructor is independent (no school) or the school hasn't set any
+ * prices yet.
+ */
+export function effectiveTieredProfile<T extends TieredProfile>(
+  profile: T | null | undefined,
+  school: SchoolPricingTiers | null | undefined,
+): T | null | undefined {
+  if (!profile || !school) return profile;
+  const s1 = school.price_1_kurus ?? 0;
+  const s2 = school.price_2_kurus ?? 0;
+  const s3 = school.price_3_kurus ?? 0;
+  const s4 = school.price_4plus_kurus ?? 0;
+  if (s1 <= 0 && s2 <= 0 && s3 <= 0 && s4 <= 0) return profile;
+  return {
+    ...profile,
+    price_1_person: s1 > 0 ? s1 : profile.price_1_person,
+    price_2_person: s2 > 0 ? s2 : profile.price_2_person,
+    price_3_person: s3 > 0 ? s3 : profile.price_3_person,
+    price_4_plus_person: s4 > 0 ? s4 : profile.price_4_plus_person,
+  };
+}
+
 export function pickTierKurus(
   profile: TieredProfile | null | undefined,
   studentCount: number,
