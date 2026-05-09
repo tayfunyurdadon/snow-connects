@@ -36,7 +36,12 @@ import type {
 } from "@/lib/types";
 
 function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Local date (YYYY-MM-DD) — toISOString() would shift to UTC and roll
+  // the day backwards in TR (UTC+3) timezone.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 function dayShort(d: Date) {
   return d.toLocaleDateString("tr-TR", { weekday: "short" });
