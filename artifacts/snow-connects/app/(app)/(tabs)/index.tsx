@@ -471,8 +471,8 @@ function InstructorHome() {
         .from("bookings")
         .select(
           `id, lesson_date, total_price, source, student_count, slot_ids,
-           manual_customer_name, manual_customer_phone,
-           customer:users!customer_id(name, phone),
+           manual_customer_name,
+           customer:users!customer_id(name),
            students(first_name, last_name, age, experience_level)`,
         )
         .eq("instructor_id", user!.id)
@@ -489,8 +489,7 @@ function InstructorHome() {
         student_count: number;
         slot_ids: string[];
         manual_customer_name: string | null;
-        manual_customer_phone: string | null;
-        customer: { name: string | null; phone: string | null } | null;
+        customer: { name: string | null } | null;
         students:
           | {
               first_name: string;
@@ -505,7 +504,7 @@ function InstructorHome() {
       // single-object shape (we know `customer` is at most one row).
       const list = ((rows ?? []) as unknown[]).map((r) => {
         const row = r as Omit<Row, "customer"> & {
-          customer: { name: string | null; phone: string | null }[] | null;
+          customer: { name: string | null }[] | null;
         };
         return {
           ...row,
@@ -639,10 +638,6 @@ function InstructorHome() {
             b.source === "manual"
               ? b.manual_customer_name || "Manuel müşteri"
               : b.customer?.name || "Müşteri";
-          const customerPhone =
-            b.source === "manual"
-              ? b.manual_customer_phone
-              : b.customer?.phone;
           const sessions = sessionsLabel(b.slot_times ?? []);
           return (
             <Card key={b.id} style={{ gap: 10 }}>
@@ -720,12 +715,6 @@ function InstructorHome() {
                 >
                   {customerName}
                 </Text>
-                {customerPhone ? (
-                  <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
-                    <Feather name="phone" size={11} /> {customerPhone}
-                  </Text>
-                ) : null}
-
                 {(b.students ?? []).length > 0 ? (
                   <View style={{ marginTop: 4, gap: 3 }}>
                     {(b.students ?? []).map((s, idx) => (
