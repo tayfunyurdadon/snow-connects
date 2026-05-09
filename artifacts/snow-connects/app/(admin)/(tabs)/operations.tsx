@@ -84,7 +84,7 @@ export default function AdminOperations() {
         onChange={setSub}
         options={[
           { id: "bookings", label: "Rezervasyon" },
-          { id: "payouts", label: "Ödemeler" },
+          { id: "payouts", label: "Bireysel Ödemeler" },
           { id: "school_payouts", label: "Okul Ödemeleri" },
           { id: "flags", label: "Şikayetler", count: flagCount ?? 0 },
           { id: "disputes", label: "İtirazlar", count: disputeCount ?? 0 },
