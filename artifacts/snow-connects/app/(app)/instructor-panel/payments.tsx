@@ -26,7 +26,12 @@ import { useColors } from "@/hooks/useColors";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { TIME_SLOTS } from "@/lib/timeSlots";
-import type { Booking, Payout, Resort } from "@/lib/types";
+import type {
+  Booking,
+  InstructorSchoolPaymentRow,
+  Payout,
+  Resort,
+} from "@/lib/types";
 
 type TabKey = "pending" | "completed" | "all";
 type StatusFilter = "all" | "pending" | "released" | "cancelled";
@@ -306,6 +311,11 @@ export default function PaymentsScreen() {
           value={formatTRY(lifetimeEarnings)}
         />
       </View>
+
+      {/* SCHOOL PAYMENTS (Phase 14) — only renders if the instructor
+          actually has any school payments. */}
+      <SchoolPaymentsCard />
+
 
       {/* VIEW TOGGLE */}
       <View
@@ -1504,6 +1514,149 @@ function StatTile({
       >
         {label}
       </Text>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------
+// Phase 14: school → instructor payment history (read-only).
+// Renders nothing if the instructor has no school payments yet,
+// so independent (non-school) instructors don't see an empty card.
+// ---------------------------------------------------------------
+function SchoolPaymentsCard() {
+  const c = useColors();
+  const { user } = useAuth();
+  const [open, setOpen] = useState(true);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["my-school-payments", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc(
+        "instructor_my_school_payments",
+      );
+      if (error) throw error;
+      return (data ?? []) as InstructorSchoolPaymentRow[];
+    },
+    enabled: !!user,
+  });
+
+  if (isLoading || !data || data.length === 0) return null;
+
+  const total = data.reduce((s, p) => s + p.amount_kurus, 0);
+  const last = data[0];
+
+  return (
+    <Card padding={16}>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+          >
+            <Feather name="briefcase" size={14} color={c.accentDeep} />
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_700Bold",
+                fontSize: 14,
+              }}
+            >
+              Okuldan Aldığım Ödemeler
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_500Medium",
+              fontSize: 12,
+              marginTop: 4,
+            }}
+          >
+            Toplam {formatTRY(total)} · Son: {formatDateTR(last.paid_at)}
+          </Text>
+        </View>
+        <Feather
+          name={open ? "chevron-up" : "chevron-down"}
+          size={18}
+          color={c.mutedForeground}
+        />
+      </Pressable>
+
+      {open ? (
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {data.map((p) => (
+            <View
+              key={p.id}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                borderRadius: 10,
+                backgroundColor: c.muted,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 8,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={{
+                      color: c.foreground,
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 13,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {p.school_name ?? "Okul"}
+                  </Text>
+                  <Text
+                    style={{
+                      color: c.mutedForeground,
+                      fontFamily: "Inter_500Medium",
+                      fontSize: 11,
+                      marginTop: 2,
+                    }}
+                  >
+                    {formatDateTR(p.paid_at)}
+                  </Text>
+                  {p.note ? (
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontFamily: "Inter_400Regular",
+                        fontSize: 12,
+                        marginTop: 4,
+                      }}
+                    >
+                      {p.note}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Fraunces_700Bold",
+                    fontSize: 15,
+                  }}
+                >
+                  {formatTRY(p.amount_kurus)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </Card>
   );
 }

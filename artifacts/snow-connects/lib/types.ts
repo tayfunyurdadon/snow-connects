@@ -51,6 +51,31 @@ export interface SchoolInstructorBreakdownRow {
   school_share_kurus: number;
 }
 
+export interface SchoolInstructorPaymentSummaryRow {
+  instructor_id: string;
+  instructor_name: string;
+  instructor_iban: string | null;
+  school_approval_status: SchoolApprovalStatus | null;
+  earned_kurus: number;
+  paid_kurus: number;
+  balance_kurus: number;
+  released_lesson_count: number;
+  payment_count: number;
+  last_paid_at: string | null;
+}
+
+export interface SchoolInstructorPaymentRow {
+  id: string;
+  amount_kurus: number;
+  note: string | null;
+  paid_at: string;
+}
+
+export interface InstructorSchoolPaymentRow extends SchoolInstructorPaymentRow {
+  school_id: string;
+  school_name: string | null;
+}
+
 export type SchoolApprovalStatus = "pending" | "approved" | "rejected";
 export type UserStatus = "active" | "blocked" | "pending";
 

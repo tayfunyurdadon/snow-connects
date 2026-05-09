@@ -376,6 +376,52 @@ Backend (`supabase/migrations/2026_05_phase12_manual_payment_status.sql`):
 Apply this migration in the Supabase SQL editor before the new
 "Ödeme Durumu" controls work.
 
+### School → instructor cash settlements (Phase 14)
+
+School admins can now record bulk cash transfers to their instructors and
+each instructor can review the history of payments their school has made
+to them. Bookkeeping only — no FK to `payouts` or `bookings`, no payment
+gateway involvement.
+
+Backend (`supabase/migrations/2026_05_phase14_school_instructor_payments.sql`):
+
+- New table `school_instructor_payments` (`school_id`, `instructor_id`,
+  `amount_kurus > 0`, `note`, `paid_at`, `created_by`). RLS: school
+  admins read their school's rows; instructors read their own.
+- Helpers `_school_instructor_earned_kurus(school, instructor)` (sums
+  *released* school payouts for that instructor multiplied by the
+  school's `instructor_share_rate`) and `_school_instructor_paid_kurus`
+  (sum of recorded payments).
+- RPCs:
+  - `school_instructor_payment_summary()` — per-instructor earned/paid/
+    balance + last payment date + IBAN. Includes ex-school instructors
+    that still have payment history so balances stay reconciled.
+  - `school_record_instructor_payment(p_instructor, p_amount_kurus,
+    p_note)` — validates `paid + amount <= earned`.
+  - `school_instructor_payment_history(p_instructor)` — newest first.
+  - `school_delete_instructor_payment(p_id)` — 24h undo window for the
+    school admin.
+  - `instructor_my_school_payments()` — read-only feed for the
+    instructor side.
+
+Frontend:
+
+- `(school)/(tabs)/index.tsx` rewritten with two top sub-tabs:
+  **Onaylar** (existing approval flow, unchanged) and **Ödemeler** (new).
+  The Ödemeler section lists every instructor with a hak edilen / ödenen
+  / kalan tile row, IBAN display, "Ödeme Yap" + "Geçmiş" buttons.
+  RecordPaymentModal pre-fills the input with the remaining balance and
+  caps it client-side; PaymentHistoryModal lists each payment with the
+  24h delete affordance.
+- `(app)/instructor-panel/payments.tsx` gains a new
+  "Okuldan Aldığım Ödemeler" card (collapsible, school name + amount +
+  date + note per row). The card auto-hides when the RPC returns no
+  rows so independent (non-school) instructors don't see an empty
+  section.
+
+Apply this migration in the Supabase SQL editor before opening the
+Eğitmenler → Ödemeler sub-tab.
+
 ### Super-admin "Okul Ödemeleri" view (Phase 13)
 
 The admin Operasyon tab gets a new sub-tab **"Okul Ödemeleri"** that
