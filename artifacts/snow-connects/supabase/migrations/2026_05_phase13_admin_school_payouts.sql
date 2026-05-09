@@ -52,7 +52,7 @@ begin
       from school_payouts sp
      group by sp.school_id
   )
-  select coalesce(json_agg(json_build_object(
+  select json_agg(json_build_object(
            'school_id',         ps.school_id,
            'school_name',       ps.school_name,
            'iban',              ps.iban,
