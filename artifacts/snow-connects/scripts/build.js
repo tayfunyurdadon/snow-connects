@@ -127,6 +127,17 @@ function getExpoPublicReplId() {
   return process.env.REPL_ID || process.env.EXPO_PUBLIC_REPL_ID;
 }
 
+function getExpoPublicEnv() {
+  const env = {};
+  if (process.env.SUPABASE_URL) {
+    env.EXPO_PUBLIC_SUPABASE_URL = process.env.SUPABASE_URL;
+  }
+  if (process.env.SUPABASE_PUBLISHABLE_KEY) {
+    env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+  }
+  return env;
+}
+
 async function startMetro(expoPublicDomain, expoPublicReplId) {
   const isRunning = await checkMetroHealth();
   if (isRunning) {
@@ -138,9 +149,15 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
   const env = {
     ...process.env,
+    ...getExpoPublicEnv(),
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
   };
+  if (env.EXPO_PUBLIC_SUPABASE_URL) {
+    console.log("Setting EXPO_PUBLIC_SUPABASE_URL=<from SUPABASE_URL secret>");
+  } else {
+    console.warn("WARNING: SUPABASE_URL secret missing — bundle will lack supabase config");
+  }
 
   if (expoPublicReplId) {
     console.log(`Setting EXPO_PUBLIC_REPL_ID=${expoPublicReplId}`);
@@ -576,7 +593,11 @@ function buildWeb() {
     const child = spawn(
       "pnpm",
       ["exec", "expo", "export", "--platform", "web", "--output-dir", webOut, "--clear"],
-      { stdio: "inherit", cwd: projectRoot, env: process.env },
+      {
+        stdio: "inherit",
+        cwd: projectRoot,
+        env: { ...process.env, ...getExpoPublicEnv() },
+      },
     );
     child.on("exit", (code) => {
       if (code === 0) {
