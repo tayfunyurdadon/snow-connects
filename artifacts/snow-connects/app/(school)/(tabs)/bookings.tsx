@@ -53,6 +53,26 @@ function dayLong(d: Date) {
     month: "long",
   });
 }
+function monthShort(d: Date) {
+  return d.toLocaleDateString("tr-TR", { month: "short" });
+}
+function monthLong(d: Date) {
+  return d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+}
+function monthRangeLabel(days: Date[]) {
+  if (days.length === 0) return "";
+  const first = days[0];
+  const last = days[days.length - 1];
+  const sameMonth =
+    first.getMonth() === last.getMonth() &&
+    first.getFullYear() === last.getFullYear();
+  if (sameMonth) return monthLong(first);
+  const sameYear = first.getFullYear() === last.getFullYear();
+  if (sameYear) {
+    return `${monthShort(first)} – ${monthLong(last)}`;
+  }
+  return `${monthLong(first)} – ${monthLong(last)}`;
+}
 
 export default function SchoolCalendar() {
   const qc = useQueryClient();
@@ -192,14 +212,29 @@ export default function SchoolCalendar() {
         </View>
       </View>
 
+      <Text
+        style={{
+          color: adminTheme.textMuted,
+          fontFamily: adminTheme.fontTitle,
+          fontSize: 11,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          marginTop: 4,
+        }}
+      >
+        {monthRangeLabel(days)}
+      </Text>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 6, paddingVertical: 4 }}
       >
-        {days.map((d) => {
+        {days.map((d, i) => {
           const iso = isoDate(d);
           const active = iso === selectedDate;
+          const prev = i > 0 ? days[i - 1] : null;
+          const showMonth = !prev || prev.getMonth() !== d.getMonth();
           return (
             <Pressable
               key={iso}
@@ -237,6 +272,19 @@ export default function SchoolCalendar() {
                 }}
               >
                 {d.getDate()}
+              </Text>
+              <Text
+                style={{
+                  color: active ? "#fff" : adminTheme.textMuted,
+                  fontFamily: adminTheme.fontTitle,
+                  fontSize: 9,
+                  letterSpacing: 0.5,
+                  textTransform: "uppercase",
+                  marginTop: 1,
+                  opacity: showMonth ? 1 : 0.55,
+                }}
+              >
+                {monthShort(d)}
               </Text>
             </Pressable>
           );
