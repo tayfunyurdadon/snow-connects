@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -720,20 +721,7 @@ function PaymentHistoryModal({
                   </View>
                   {canDelete(p.paid_at) ? (
                     <Pressable
-                      onPress={() =>
-                        Alert.alert(
-                          "Sil",
-                          "Bu ödeme kaydını silmek istediğinize emin misiniz?",
-                          [
-                            { text: "Vazgeç", style: "cancel" },
-                            {
-                              text: "Sil",
-                              style: "destructive",
-                              onPress: () => del(p.id),
-                            },
-                          ],
-                        )
-                      }
+                      onPress={() => confirmDelete(() => del(p.id))}
                       style={{ padding: 6 }}
                     >
                       <Feather
@@ -834,6 +822,24 @@ function formatDateTime(iso: string): string {
 
 function canDelete(iso: string): boolean {
   return Date.now() - new Date(iso).getTime() < 24 * 60 * 60 * 1000;
+}
+
+// React Native's Alert.alert with multiple buttons doesn't render
+// properly on web (Expo web only shows the message). Fall back to
+// window.confirm so the destructive action is actually reachable
+// from the Replit preview.
+function confirmDelete(onConfirm: () => void) {
+  const message = "Bu ödeme kaydını silmek istediğinize emin misiniz?";
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined" && window.confirm(message)) {
+      onConfirm();
+    }
+    return;
+  }
+  Alert.alert("Sil", message, [
+    { text: "Vazgeç", style: "cancel" },
+    { text: "Sil", style: "destructive", onPress: onConfirm },
+  ]);
 }
 
 const modalStyles = {
