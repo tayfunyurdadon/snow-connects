@@ -889,16 +889,7 @@ function ManualBookingModal({
                           gap: 8,
                         }}
                       >
-                        <Pressable
-                          disabled={allBlocked}
-                          onPress={() => {
-                            // Switching instructors clears slot selection
-                            // — enforces "1 booking = 1 instructor".
-                            if (ins.instructor_id !== instructorId) {
-                              setInstructorId(ins.instructor_id);
-                              setSelectedTimes([]);
-                            }
-                          }}
+                        <View
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
@@ -937,9 +928,9 @@ function ManualBookingModal({
                               ? "müsait değil"
                               : `${freeSlots.length} boş saat`}
                           </Text>
-                        </Pressable>
+                        </View>
 
-                        {isPicked && !allBlocked ? (
+                        {!allBlocked ? (
                           <View
                             style={{
                               flexDirection: "row",
@@ -948,11 +939,24 @@ function ManualBookingModal({
                             }}
                           >
                             {freeSlots.map((t) => {
-                              const sel = selectedTimes.includes(t);
+                              const sel =
+                                isPicked && selectedTimes.includes(t);
                               return (
                                 <Pressable
                                   key={t}
-                                  onPress={() => toggleSlot(t)}
+                                  onPress={() => {
+                                    // Tapping any slot of another instructor
+                                    // switches the booking to that
+                                    // instructor and starts a fresh slot
+                                    // selection (one booking = one
+                                    // instructor).
+                                    if (ins.instructor_id !== instructorId) {
+                                      setInstructorId(ins.instructor_id);
+                                      setSelectedTimes([t]);
+                                    } else {
+                                      toggleSlot(t);
+                                    }
+                                  }}
                                   style={{
                                     paddingHorizontal: 10,
                                     paddingVertical: 6,
