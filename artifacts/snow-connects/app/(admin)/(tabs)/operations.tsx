@@ -115,6 +115,10 @@ function BookingsTab() {
         .select(
           "*, resort:resorts(name), customer:users!customer_id(name), instructor:users!instructor_id(name)",
         )
+        // Exclude schools' internal manual (walk-in / phone) bookings —
+        // they're a school-side bookkeeping artefact, not a platform
+        // booking the super-admin can act on.
+        .eq("source", "online")
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;

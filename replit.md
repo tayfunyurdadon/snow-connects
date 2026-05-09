@@ -240,6 +240,15 @@ Each migration is in `supabase/migrations/` and is idempotent. Apply via SQL edi
   Geçmiş buttons. `(app)/instructor-panel/payments.tsx` gains a collapsible "Okuldan
   Aldığım Ödemeler" card (auto-hides for independents).
 
+- **Phase 16 — Hide manual bookings from super-admin
+  (`2026_05_phase16_admin_stats_exclude_manual.sql`).** Schools' internal manual
+  (walk-in / phone) bookings are bookkeeping artefacts the platform never collects money
+  for, so they shouldn't appear in super-admin views. `admin_stats()` is replaced
+  in-place to count `totalBookings` / `paidBookings` / `revenueKurus` only where
+  `bookings.source = 'online'` (other counters unchanged). The Operasyon → Rezervasyonlar
+  list query in `(admin)/(tabs)/operations.tsx` adds `.eq('source', 'online')` for the
+  same reason.
+
 - **Phase 15 — Effective school pricing
   (`2026_05_phase15_school_pricing_effective.sql`).** Phase 10 added per-school tier
   prices but `create_booking` and the customer screens never read them, so school-
