@@ -16,7 +16,33 @@ import { useColors } from "@/hooks/useColors";
 import { isInSeason, getSeasonForDate } from "@/lib/season";
 import { formatDateTR } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
+import { slotLabel, TIME_SLOTS } from "@/lib/timeSlots";
 import { EXPERIENCE_LEVELS, type Resort } from "@/lib/types";
+
+function levelLabel(value: string): string {
+  const fromList = EXPERIENCE_LEVELS.find((e) => e.value === value)?.label;
+  if (fromList) return fromList;
+  // Manual bookings default to 'beginner' (Phase 9) — map to Turkish.
+  const fallback: Record<string, string> = {
+    beginner: "Başlangıç",
+    intermediate: "Orta",
+    advanced: "İleri",
+  };
+  return fallback[value] ?? value;
+}
+
+function sessionsLabel(slotIds: string[]): string | null {
+  if (!slotIds || slotIds.length === 0) return null;
+  const sorted = [...slotIds].sort();
+  if (sorted.length === 1) return slotLabel(sorted[0]);
+  // Multiple slots — show start of first → end of last for the full range.
+  const first = TIME_SLOTS.find((s) => s.id === sorted[0]);
+  const last = TIME_SLOTS.find((s) => s.id === sorted[sorted.length - 1]);
+  if (first && last) {
+    return `${first.start} – ${last.end} (${sorted.length} seans)`;
+  }
+  return sorted.join(", ");
+}
 
 export default function HomeTab() {
   const { user, loading } = useAuth();
@@ -617,13 +643,7 @@ function InstructorHome() {
             b.source === "manual"
               ? b.manual_customer_phone
               : b.customer?.phone;
-          const slots = b.slot_times ?? [];
-          const slotLabel =
-            slots.length === 0
-              ? null
-              : slots.length === 1
-                ? slots[0]
-                : `${slots[0]} – ${slots.length} slot`;
+          const sessions = sessionsLabel(b.slot_times ?? []);
           return (
             <Card key={b.id} style={{ gap: 10 }}>
               <View
@@ -644,29 +664,21 @@ function InstructorHome() {
                   >
                     {formatDateTR(b.lesson_date)}
                   </Text>
-                  {slotLabel ? (
-                    <Text
-                      style={{
-                        color: c.mutedForeground,
-                        fontSize: 12,
-                        marginTop: 2,
-                      }}
-                    >
-                      <Feather name="clock" size={11} /> {slotLabel}
-                      {"  ·  "}
-                      {b.student_count} öğrenci
-                    </Text>
-                  ) : (
-                    <Text
-                      style={{
-                        color: c.mutedForeground,
-                        fontSize: 12,
-                        marginTop: 2,
-                      }}
-                    >
-                      {b.student_count} öğrenci
-                    </Text>
-                  )}
+                  <Text
+                    style={{
+                      color: c.mutedForeground,
+                      fontSize: 12,
+                      marginTop: 2,
+                    }}
+                  >
+                    {sessions ? (
+                      <>
+                        <Feather name="clock" size={11} /> {sessions}
+                        {"  ·  "}
+                      </>
+                    ) : null}
+                    {b.student_count} öğrenci
+                  </Text>
                 </View>
                 {b.source === "manual" ? (
                   <View
@@ -721,10 +733,8 @@ function InstructorHome() {
                         key={idx}
                         style={{ color: c.mutedForeground, fontSize: 12 }}
                       >
-                        • {s.first_name} {s.last_name} ({s.age} yaş,{" "}
-                        {EXPERIENCE_LEVELS.find(
-                          (e) => e.value === s.experience_level,
-                        )?.label ?? s.experience_level})
+                        • {s.first_name} {s.last_name} ({s.age} yaş ·{" "}
+                        {levelLabel(s.experience_level)})
                       </Text>
                     ))}
                   </View>
