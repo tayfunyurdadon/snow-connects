@@ -682,25 +682,13 @@ function ManualBookingModal({
     });
   }, []);
 
-  // Eligible instructors: free for every selected slot on this date.
-  const eligibleInstructors = useMemo(() => {
-    if (!dayData) return [];
-    if (selectedTimes.length === 0) return dayData.instructors;
-    return dayData.instructors.filter((ins) =>
-      selectedTimes.every((t) => {
-        const slot = ins.slots.find((s) => s.slot_time === t);
-        return slot && slot.status === "available";
-      }),
-    );
-  }, [dayData, selectedTimes]);
-
-  // Reset chosen instructor if they become ineligible after a slot/date change.
+  // When date changes, clear the previous instructor + slot selection so
+  // the user re-picks against the new day's availability. This also
+  // enforces the "one booking = one instructor" rule cleanly.
   useEffect(() => {
-    if (!instructorId) return;
-    if (!eligibleInstructors.some((i) => i.instructor_id === instructorId)) {
-      setInstructorId(null);
-    }
-  }, [eligibleInstructors, instructorId]);
+    setInstructorId(null);
+    setSelectedTimes([]);
+  }, [date]);
 
   function toggleSlot(t: string) {
     setSelectedTimes((cur) =>
@@ -858,108 +846,141 @@ function ManualBookingModal({
             </View>
 
             <View>
-              <Text style={modalStyles.sectionLabel}>Seanslar *</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                {TIME_SLOTS.map((t) => {
-                  const sel = selectedTimes.includes(t.id);
-                  // A slot is "any free" if at least one instructor is
-                  // available for it on this date.
-                  const anyFree = (dayData?.instructors ?? []).some(
-                    (ins) =>
-                      ins.slots.find((s) => s.slot_time === t.id)?.status ===
-                      "available",
-                  );
-                  const disabled = !anyFree && !sel;
-                  return (
-                    <Pressable
-                      key={t.id}
-                      disabled={disabled}
-                      onPress={() => toggleSlot(t.id)}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: adminTheme.radiusSm,
-                        borderWidth: 1,
-                        borderColor: sel
-                          ? adminTheme.accent
-                          : adminTheme.border,
-                        backgroundColor: sel
-                          ? adminTheme.accent
-                          : adminTheme.surfaceMuted,
-                        opacity: disabled ? 0.35 : 1,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: sel ? "#fff" : adminTheme.text,
-                          fontFamily: adminTheme.fontTitle,
-                          fontSize: 11,
-                        }}
-                      >
-                        {t.start}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View>
-              <Text style={modalStyles.sectionLabel}>Eğitmen *</Text>
+              <Text style={modalStyles.sectionLabel}>
+                Eğitmen ve müsait saatler *
+              </Text>
+              <Text
+                style={[modalStyles.helperText, { marginBottom: 8 }]}
+              >
+                Bir eğitmen seç, ardından o eğitmenin müsait saatlerinden
+                seçim yap. Tek rezervasyon = tek eğitmen.
+              </Text>
               {loadingDay ? (
                 <Text style={modalStyles.helperText}>Yükleniyor…</Text>
-              ) : selectedTimes.length === 0 ? (
-                <Text style={modalStyles.helperText}>
-                  Önce seans seç. Uygun eğitmenler burada listelenecek.
-                </Text>
-              ) : eligibleInstructors.length === 0 ? (
+              ) : (dayData?.instructors ?? []).length === 0 ? (
                 <Text
                   style={[modalStyles.helperText, { color: adminTheme.danger }]}
                 >
-                  Seçilen saatlerde uygun eğitmen yok.
+                  Bu okula bağlı onaylı eğitmen yok.
                 </Text>
               ) : (
-                <View style={{ gap: 6 }}>
-                  {eligibleInstructors.map((ins) => {
-                    const sel = ins.instructor_id === instructorId;
+                <View style={{ gap: 8 }}>
+                  {(dayData?.instructors ?? []).map((ins) => {
+                    const isPicked = ins.instructor_id === instructorId;
+                    const freeSlots = ins.slots
+                      .filter((s) => s.status === "available")
+                      .map((s) => s.slot_time)
+                      .sort();
+                    const allBlocked = freeSlots.length === 0;
                     return (
-                      <Pressable
+                      <View
                         key={ins.instructor_id}
-                        onPress={() => setInstructorId(ins.instructor_id)}
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          paddingHorizontal: 12,
-                          paddingVertical: 10,
+                          padding: 10,
                           borderRadius: adminTheme.radiusSm,
                           borderWidth: 1,
-                          borderColor: sel
+                          borderColor: isPicked
                             ? adminTheme.accent
                             : adminTheme.border,
-                          backgroundColor: sel
+                          backgroundColor: isPicked
                             ? adminTheme.accentSoft
                             : adminTheme.surfaceMuted,
+                          opacity: allBlocked ? 0.45 : 1,
+                          gap: 8,
                         }}
                       >
-                        <Feather
-                          name={sel ? "check-circle" : "circle"}
-                          size={16}
-                          color={
-                            sel ? adminTheme.accent : adminTheme.textMuted
-                          }
-                        />
-                        <Text
+                        <Pressable
+                          disabled={allBlocked}
+                          onPress={() => {
+                            // Switching instructors clears slot selection
+                            // — enforces "1 booking = 1 instructor".
+                            if (ins.instructor_id !== instructorId) {
+                              setInstructorId(ins.instructor_id);
+                              setSelectedTimes([]);
+                            }
+                          }}
                           style={{
-                            flex: 1,
-                            color: adminTheme.text,
-                            fontFamily: adminTheme.fontTitle,
-                            fontSize: 13,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
                           }}
                         >
-                          {ins.instructor_name}
-                        </Text>
-                      </Pressable>
+                          <Feather
+                            name={isPicked ? "check-circle" : "circle"}
+                            size={16}
+                            color={
+                              isPicked
+                                ? adminTheme.accent
+                                : adminTheme.textMuted
+                            }
+                          />
+                          <Text
+                            style={{
+                              flex: 1,
+                              color: adminTheme.text,
+                              fontFamily: adminTheme.fontTitle,
+                              fontSize: 13,
+                            }}
+                          >
+                            {ins.instructor_name}
+                          </Text>
+                          <Text
+                            style={{
+                              color: allBlocked
+                                ? adminTheme.danger
+                                : adminTheme.textDim,
+                              fontFamily: adminTheme.fontBody,
+                              fontSize: 11,
+                            }}
+                          >
+                            {allBlocked
+                              ? "müsait değil"
+                              : `${freeSlots.length} boş saat`}
+                          </Text>
+                        </Pressable>
+
+                        {isPicked && !allBlocked ? (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              flexWrap: "wrap",
+                              gap: 6,
+                            }}
+                          >
+                            {freeSlots.map((t) => {
+                              const sel = selectedTimes.includes(t);
+                              return (
+                                <Pressable
+                                  key={t}
+                                  onPress={() => toggleSlot(t)}
+                                  style={{
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 6,
+                                    borderRadius: adminTheme.radiusSm,
+                                    borderWidth: 1,
+                                    borderColor: sel
+                                      ? adminTheme.accent
+                                      : adminTheme.border,
+                                    backgroundColor: sel
+                                      ? adminTheme.accent
+                                      : adminTheme.surface,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: sel ? "#fff" : adminTheme.text,
+                                      fontFamily: adminTheme.fontTitle,
+                                      fontSize: 11,
+                                    }}
+                                  >
+                                    {t}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                        ) : null}
+                      </View>
                     );
                   })}
                 </View>
