@@ -240,6 +240,16 @@ Each migration is in `supabase/migrations/` and is idempotent. Apply via SQL edi
   Geçmiş buttons. `(app)/instructor-panel/payments.tsx` gains a collapsible "Okuldan
   Aldığım Ödemeler" card (auto-hides for independents).
 
+- **Phase 17 — Hide manual payouts from super-admin
+  (`2026_05_phase17_admin_school_payouts_online_only.sql`).** Manual bookings still
+  insert a school payout (Phase 9b) so the school's Gelirler tab works, but those rows
+  must not surface on the super-admin side. `admin_school_payouts()` is replaced
+  in-place to only count payouts whose underlying `bookings.source = 'online'` (joins
+  via `payouts.booking_id`); per-school + per-instructor totals therefore exclude manual
+  income. `admin_stats().pendingPayoutsKurus` is filtered the same way so the Pano tile
+  reflects what the platform actually owes. Manual rows stay in the database for the
+  school side and DB lookups.
+
 - **Phase 16 — Hide manual bookings from super-admin
   (`2026_05_phase16_admin_stats_exclude_manual.sql`).** Schools' internal manual
   (walk-in / phone) bookings are bookkeeping artefacts the platform never collects money
