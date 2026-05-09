@@ -157,6 +157,18 @@ export default function SchoolPayouts() {
         </Text>
       </AdminCard>
 
+      {/* Source split: Online (app) vs Manuel (walk-in) */}
+      <SourceSplitCard
+        onlineTotal={summary.data?.totalOnlineKurus ?? 0}
+        manualTotal={summary.data?.totalManualKurus ?? 0}
+        onlinePending={summary.data?.pendingOnlineKurus ?? 0}
+        onlineReleased={summary.data?.releasedOnlineKurus ?? 0}
+        manualPending={summary.data?.pendingManualKurus ?? 0}
+        manualReleased={summary.data?.releasedManualKurus ?? 0}
+        onlineCount={summary.data?.onlineCount ?? 0}
+        manualCount={summary.data?.manualCount ?? 0}
+      />
+
       {/* Pending vs Released */}
       <View style={{ flexDirection: "row", gap: 10 }}>
         <StatCard
@@ -371,6 +383,197 @@ export default function SchoolPayouts() {
         })
       )}
     </AdminScreen>
+  );
+}
+
+function SourceSplitCard({
+  onlineTotal,
+  manualTotal,
+  onlinePending,
+  onlineReleased,
+  manualPending,
+  manualReleased,
+  onlineCount,
+  manualCount,
+}: {
+  onlineTotal: number;
+  manualTotal: number;
+  onlinePending: number;
+  onlineReleased: number;
+  manualPending: number;
+  manualReleased: number;
+  onlineCount: number;
+  manualCount: number;
+}) {
+  const grand = onlineTotal + manualTotal;
+  const onlinePct = grand > 0 ? Math.round((onlineTotal / grand) * 100) : 0;
+  const manualPct = grand > 0 ? 100 - onlinePct : 0;
+  return (
+    <AdminCard padding={16}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <Text
+          style={{
+            color: adminTheme.textMuted,
+            fontFamily: adminTheme.fontTitle,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+          }}
+        >
+          Kaynak Bazında
+        </Text>
+        <Text
+          style={{
+            color: adminTheme.textDim,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+          }}
+        >
+          Online · Manuel
+        </Text>
+      </View>
+
+      {/* Stacked split bar */}
+      <View
+        style={{
+          height: 10,
+          borderRadius: 5,
+          backgroundColor: adminTheme.surfaceMuted,
+          overflow: "hidden",
+          flexDirection: "row",
+        }}
+      >
+        {grand > 0 ? (
+          <>
+            <View style={{ flex: onlinePct, backgroundColor: adminTheme.info }} />
+            <View
+              style={{ flex: manualPct, backgroundColor: adminTheme.warning }}
+            />
+          </>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+        <SourceTile
+          label={`Online · %${onlinePct}`}
+          total={onlineTotal}
+          pending={onlinePending}
+          released={onlineReleased}
+          count={onlineCount}
+          color={adminTheme.info}
+        />
+        <SourceTile
+          label={`Manuel · %${manualPct}`}
+          total={manualTotal}
+          pending={manualPending}
+          released={manualReleased}
+          count={manualCount}
+          color={adminTheme.warning}
+        />
+      </View>
+    </AdminCard>
+  );
+}
+
+function SourceTile({
+  label,
+  total,
+  pending,
+  released,
+  count,
+  color,
+}: {
+  label: string;
+  total: number;
+  pending: number;
+  released: number;
+  count: number;
+  color: string;
+}) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        borderWidth: 1,
+        borderColor: adminTheme.border,
+        borderRadius: adminTheme.radius,
+        padding: 12,
+        backgroundColor: adminTheme.surface,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: color,
+          }}
+        />
+        <Text
+          style={{
+            color: adminTheme.textMuted,
+            fontFamily: adminTheme.fontTitle,
+            fontSize: 10,
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </Text>
+      </View>
+      <Text
+        style={{
+          color: adminTheme.text,
+          fontFamily: adminTheme.fontHeadline,
+          fontSize: 18,
+          marginTop: 6,
+          letterSpacing: -0.3,
+        }}
+      >
+        {formatTRY(total)}
+      </Text>
+      <Text
+        style={{
+          color: adminTheme.textDim,
+          fontFamily: adminTheme.fontBody,
+          fontSize: 11,
+          marginTop: 2,
+        }}
+      >
+        {count} kayıt
+      </Text>
+      <View style={{ height: 1, backgroundColor: adminTheme.border, marginVertical: 8 }} />
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <Text
+          style={{
+            color: adminTheme.warning,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+          }}
+        >
+          Bek. {formatTRY(pending)}
+        </Text>
+        <Text
+          style={{
+            color: adminTheme.success,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+          }}
+        >
+          Tah. {formatTRY(released)}
+        </Text>
+      </View>
+    </View>
   );
 }
 

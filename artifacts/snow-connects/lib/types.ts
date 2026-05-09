@@ -28,6 +28,16 @@ export interface SchoolPayoutsSummary {
   pendingSchoolKurus: number;
   releasedInstructorKurus: number;
   releasedSchoolKurus: number;
+  // Source split (online from app vs manual walk-in). Optional for
+  // backwards compatibility with stale clients hitting an old RPC.
+  pendingOnlineKurus?: number;
+  pendingManualKurus?: number;
+  releasedOnlineKurus?: number;
+  releasedManualKurus?: number;
+  totalOnlineKurus?: number;
+  totalManualKurus?: number;
+  onlineCount?: number;
+  manualCount?: number;
 }
 
 export interface SchoolInstructorBreakdownRow {

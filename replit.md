@@ -360,6 +360,29 @@ Backend (`supabase/migrations/2026_05_phase10_school_pricing.sql`):
 Apply this migration in the Supabase SQL editor before the new Profil
 "Ders Fiyatlandırması" card and the modal's auto-pricing work.
 
+### Online vs Manuel revenue split (Phase 11)
+
+Gelirler tab now shows app (online) bookings and manual (walk-in / phone)
+bookings as separate revenue streams.
+
+Backend (`supabase/migrations/2026_05_phase11_payouts_source_split.sql`):
+
+- `school_payouts_summary()` updated in-place; signature unchanged. Adds
+  `pendingOnlineKurus`, `pendingManualKurus`, `releasedOnlineKurus`,
+  `releasedManualKurus`, `totalOnlineKurus`, `totalManualKurus`,
+  `onlineCount`, `manualCount` to the returned JSON. Joins payouts with
+  bookings on `bookings.source` to classify.
+
+Frontend:
+
+- `(school)/(tabs)/payouts.tsx` adds a "Kaynak Bazında" card with a
+  stacked online/manual bar and two tiles. Each tile shows the source's
+  total + record count + a Bek./Tah. mini split.
+- `SchoolPayoutsSummary` type extended with optional source-split fields
+  for backwards compatibility with the old RPC shape.
+
+Apply this migration in the Supabase SQL editor.
+
 ### Hotfix: school instructor bookable (Phase 9c)
 
 `supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
