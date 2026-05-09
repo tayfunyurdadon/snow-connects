@@ -24,7 +24,33 @@ import {
   type Payout,
 } from "@/lib/types";
 
-type SubTab = "bookings" | "payouts" | "flags" | "disputes";
+type SubTab =
+  | "bookings"
+  | "payouts"
+  | "school_payouts"
+  | "flags"
+  | "disputes";
+
+type SchoolPayoutInstructor = {
+  instructor_id: string;
+  instructor_name: string;
+  pending_kurus: number;
+  released_kurus: number;
+  total_kurus: number;
+  payout_count: number;
+};
+
+type SchoolPayoutRow = {
+  school_id: string;
+  school_name: string;
+  iban: string | null;
+  iban_holder_name: string | null;
+  pending_kurus: number;
+  released_kurus: number;
+  total_kurus: number;
+  payout_count: number;
+  instructors: SchoolPayoutInstructor[];
+};
 
 export default function AdminOperations() {
   const [sub, setSub] = useState<SubTab>("bookings");
@@ -59,12 +85,14 @@ export default function AdminOperations() {
         options={[
           { id: "bookings", label: "Rezervasyon" },
           { id: "payouts", label: "Ödemeler" },
+          { id: "school_payouts", label: "Okul Ödemeleri" },
           { id: "flags", label: "Şikayetler", count: flagCount ?? 0 },
           { id: "disputes", label: "İtirazlar", count: disputeCount ?? 0 },
         ]}
       />
       {sub === "bookings" && <BookingsTab />}
       {sub === "payouts" && <PayoutsTab />}
+      {sub === "school_payouts" && <SchoolPayoutsTab />}
       {sub === "flags" && <FlagsTab />}
       {sub === "disputes" && <DisputesTab />}
     </AdminScreen>
@@ -296,6 +324,206 @@ function PayoutsTab() {
           </View>
         </AdminCard>
       ))}
+    </>
+  );
+}
+
+function SchoolPayoutsTab() {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-school-payouts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_school_payouts");
+      if (error) throw error;
+      return (data ?? []) as SchoolPayoutRow[];
+    },
+  });
+
+  if (isLoading) return <AdminSpinner />;
+  if (!data || data.length === 0)
+    return (
+      <AdminEmpty
+        icon="briefcase"
+        title="Okul kaydı yok"
+        description="Henüz kayıtlı bir kayak okulu yok ya da hiçbir okula yönlendirilmiş ödeme yok."
+      />
+    );
+
+  return (
+    <>
+      {data.map((s) => {
+        const isOpen = !!open[s.school_id];
+        return (
+          <AdminCard key={s.school_id}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 10,
+              }}
+            >
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: adminTheme.text,
+                    fontFamily: adminTheme.fontTitle,
+                    fontSize: 14,
+                  }}
+                >
+                  {s.school_name}
+                </Text>
+                {s.iban ? (
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: adminTheme.textMuted,
+                      fontFamily: adminTheme.fontBody,
+                      fontSize: 11,
+                    }}
+                  >
+                    {s.iban_holder_name ? `${s.iban_holder_name} · ` : ""}
+                    {s.iban}
+                  </Text>
+                ) : (
+                  <Text
+                    style={{
+                      color: adminTheme.warning,
+                      fontFamily: adminTheme.fontBody,
+                      fontSize: 11,
+                    }}
+                  >
+                    IBAN girilmemiş
+                  </Text>
+                )}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 6,
+                    marginTop: 4,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <AdminPill
+                    label={`Bekleyen ${formatTRY(s.pending_kurus)}`}
+                    tone={s.pending_kurus > 0 ? "warning" : "default"}
+                    size="sm"
+                  />
+                  <AdminPill
+                    label={`Tahsil ${formatTRY(s.released_kurus)}`}
+                    tone="success"
+                    size="sm"
+                  />
+                  <AdminPill
+                    label={`${s.payout_count} kayıt`}
+                    tone="default"
+                    size="sm"
+                  />
+                </View>
+              </View>
+              <View style={{ alignItems: "flex-end", gap: 6 }}>
+                <Text
+                  style={{
+                    color: adminTheme.text,
+                    fontFamily: adminTheme.fontHeadline,
+                    fontSize: 16,
+                  }}
+                >
+                  {formatTRY(s.total_kurus)}
+                </Text>
+                {s.instructors.length > 0 ? (
+                  <AdminButton
+                    label={
+                      isOpen
+                        ? "Eğitmenleri gizle"
+                        : `Eğitmenler (${s.instructors.length})`
+                    }
+                    size="sm"
+                    tone="ghost"
+                    icon={isOpen ? "chevron-up" : "chevron-down"}
+                    onPress={() =>
+                      setOpen((prev) => ({
+                        ...prev,
+                        [s.school_id]: !prev[s.school_id],
+                      }))
+                    }
+                  />
+                ) : null}
+              </View>
+            </View>
+
+            {isOpen && s.instructors.length > 0 ? (
+              <View
+                style={{
+                  marginTop: 12,
+                  paddingTop: 10,
+                  borderTopWidth: 1,
+                  borderTopColor: adminTheme.border,
+                  gap: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: adminTheme.textDim,
+                    fontFamily: adminTheme.fontTitle,
+                    fontSize: 10,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.6,
+                  }}
+                >
+                  Eğitmen Bazında
+                </Text>
+                {s.instructors.map((inst) => (
+                  <View
+                    key={inst.instructor_id}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          color: adminTheme.text,
+                          fontFamily: adminTheme.fontBody,
+                          fontSize: 13,
+                        }}
+                      >
+                        {inst.instructor_name}
+                      </Text>
+                      <Text
+                        style={{
+                          color: adminTheme.textMuted,
+                          fontFamily: adminTheme.fontBody,
+                          fontSize: 11,
+                          marginTop: 2,
+                        }}
+                      >
+                        {inst.payout_count} kayıt · Bek.{" "}
+                        {formatTRY(inst.pending_kurus)} · Tah.{" "}
+                        {formatTRY(inst.released_kurus)}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        color: adminTheme.text,
+                        fontFamily: adminTheme.fontTitle,
+                        fontSize: 13,
+                      }}
+                    >
+                      {formatTRY(inst.total_kurus)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </AdminCard>
+        );
+      })}
     </>
   );
 }

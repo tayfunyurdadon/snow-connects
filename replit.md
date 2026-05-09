@@ -415,6 +415,28 @@ Backend (`supabase/migrations/2026_05_phase12_manual_payment_status.sql`):
 Apply this migration in the Supabase SQL editor before the new
 "Ödeme Durumu" controls work.
 
+### Super-admin "Okul Ödemeleri" view (Phase 13)
+
+The admin Operasyon tab gets a new sub-tab **"Okul Ödemeleri"** that
+lists every ski school with the totals the platform owes them
+(bekleyen / tahsil edildi / toplam) plus an expandable per-instructor
+breakdown showing which instructors generated the school's payouts.
+Each card surfaces the school's IBAN + holder so the operator can wire
+the funds; missing IBAN is highlighted as a warning.
+
+Backend (`supabase/migrations/2026_05_phase13_admin_school_payouts.sql`):
+
+- New RPC `admin_school_payouts()` returns a JSON array, one entry per
+  school, joined to `payouts` where `recipient_type='school' and
+  recipient_id=school.id`. Each entry includes `pending_kurus`,
+  `released_kurus`, `total_kurus`, `payout_count`, `iban`,
+  `iban_holder_name`, and an `instructors[]` array (per-instructor
+  totals + payout count, ordered by total desc). Admin-only via
+  `is_admin()`.
+
+Apply this migration in the Supabase SQL editor before opening the
+Operasyon → Okul Ödemeleri tab.
+
 ### Hotfix: school instructor bookable (Phase 9c)
 
 `supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
