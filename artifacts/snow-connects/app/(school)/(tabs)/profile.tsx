@@ -35,6 +35,10 @@ export default function SchoolProfile() {
   const [iban, setIban] = useState("");
   const [holder, setHolder] = useState("");
   const [sharePct, setSharePct] = useState("35");
+  const [price1, setPrice1] = useState("");
+  const [price2, setPrice2] = useState("");
+  const [price3, setPrice3] = useState("");
+  const [price4, setPrice4] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -44,6 +48,17 @@ export default function SchoolProfile() {
     setIban(data.iban);
     setHolder(data.iban_holder_name);
     setSharePct(String(Math.round((data.instructor_share_rate ?? 0.35) * 100)));
+    // kuruş → TL display, preserving cent precision (empty if 0 so the
+    // placeholder shows). Trims trailing ".00" for whole-TL prices.
+    const k2tl = (k: number) => {
+      if (!k || k <= 0) return "";
+      const tl = (k / 100).toFixed(2);
+      return tl.endsWith(".00") ? tl.slice(0, -3) : tl.replace(/0$/, "");
+    };
+    setPrice1(k2tl(data.price_1_kurus ?? 0));
+    setPrice2(k2tl(data.price_2_kurus ?? 0));
+    setPrice3(k2tl(data.price_3_kurus ?? 0));
+    setPrice4(k2tl(data.price_4plus_kurus ?? 0));
   }, [data]);
 
   async function save() {
@@ -52,6 +67,16 @@ export default function SchoolProfile() {
       Alert.alert("Hatalı oran", "Eğitmen payı 0 ile 100 arasında olmalı.");
       return;
     }
+    const tl2k = (s: string) => {
+      const n = parseFloat(s);
+      if (Number.isNaN(n) || n < 0) return 0;
+      return Math.round(n * 100);
+    };
+    const p1k = tl2k(price1);
+    const p2k = tl2k(price2);
+    const p3k = tl2k(price3);
+    const p4k = tl2k(price4);
+
     setSaving(true);
     // Save share rate first; if it fails, the profile fields remain
     // unchanged so the two stay in sync.
@@ -61,6 +86,17 @@ export default function SchoolProfile() {
     if (rateRes.error) {
       setSaving(false);
       Alert.alert("Hata", rateRes.error.message);
+      return;
+    }
+    const pricingRes = await supabase.rpc("school_update_pricing", {
+      p_price_1: p1k,
+      p_price_2: p2k,
+      p_price_3: p3k,
+      p_price_4plus: p4k,
+    });
+    if (pricingRes.error) {
+      setSaving(false);
+      Alert.alert("Hata", pricingRes.error.message);
       return;
     }
     const profileRes = await supabase.rpc("school_update_profile", {
@@ -160,6 +196,63 @@ export default function SchoolProfile() {
             ? "Oran 0 ile 100 arasında olmalı."
             : `Eğitmen %${pctNum} · Okul %${schoolPct}. Tüm rezervasyonlara (online + manuel) uygulanır.`}
         </Text>
+      </AdminCard>
+
+      <AdminCard padding={16}>
+        <Text
+          style={{
+            color: adminTheme.textMuted,
+            fontFamily: adminTheme.fontTitle,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            marginBottom: 6,
+          }}
+        >
+          Ders Fiyatlandırması
+        </Text>
+        <Text
+          style={{
+            color: adminTheme.textDim,
+            fontFamily: adminTheme.fontBody,
+            fontSize: 11,
+            marginBottom: 12,
+          }}
+        >
+          50 dakikalık tek seans için kişi başı fiyat (TL). Manuel
+          rezervasyonlarda öğrenci sayısına göre tutar otomatik hesaplanır,
+          istersen kayıt sırasında değiştirebilirsin.
+        </Text>
+        <View style={{ gap: 10 }}>
+          <AdminInput
+            label="1 kişi · 50 dk"
+            value={price1}
+            onChangeText={(t) => setPrice1(t.replace(/[^0-9.]/g, ""))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+          />
+          <AdminInput
+            label="2 kişi · 50 dk · kişi başı"
+            value={price2}
+            onChangeText={(t) => setPrice2(t.replace(/[^0-9.]/g, ""))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+          />
+          <AdminInput
+            label="3 kişi · 50 dk · kişi başı"
+            value={price3}
+            onChangeText={(t) => setPrice3(t.replace(/[^0-9.]/g, ""))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+          />
+          <AdminInput
+            label="4+ kişi · 50 dk · kişi başı"
+            value={price4}
+            onChangeText={(t) => setPrice4(t.replace(/[^0-9.]/g, ""))}
+            keyboardType="decimal-pad"
+            placeholder="0"
+          />
+        </View>
       </AdminCard>
 
       <AdminCard padding={16}>

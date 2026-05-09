@@ -668,10 +668,33 @@ function ManualBookingModal({
   const [customerPhone, setCustomerPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [price, setPrice] = useState("");
+  const [priceTouched, setPriceTouched] = useState(false);
   const [students, setStudents] = useState<StudentDraft[]>([
     { firstName: "", lastName: "", age: "" },
   ]);
   const [saving, setSaving] = useState(false);
+
+  // School pricing tiers (per-person, per-50min, kuruş). Used to auto-fill
+  // the Tutar field based on student count × total slot count.
+  const { data: pricing } = useQuery({
+    queryKey: ["school-pricing"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ski_schools")
+        .select(
+          "price_1_kurus,price_2_kurus,price_3_kurus,price_4plus_kurus",
+        )
+        .eq("admin_user_id", (await supabase.auth.getUser()).data.user?.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as {
+        price_1_kurus: number;
+        price_2_kurus: number;
+        price_3_kurus: number;
+        price_4plus_kurus: number;
+      } | null;
+    },
+  });
 
   // One calendar query per selected date, fetched in parallel.
   const calendarQueries = useQueries({
@@ -763,6 +786,45 @@ function ManualBookingModal({
     [bookingTuples],
   );
 
+  // Effective student count (only rows with at least a first or last name
+  // actually become a real student in save()).
+  const effectiveStudentCount = useMemo(
+    () =>
+      students.filter((s) => s.firstName.trim() || s.lastName.trim()).length,
+    [students],
+  );
+
+  // Per-50min, per-student price for the current bracket (kuruş).
+  const perSlotPerStudentKurus = useMemo(() => {
+    if (!pricing || effectiveStudentCount < 1) return 0;
+    if (effectiveStudentCount === 1) return pricing.price_1_kurus ?? 0;
+    if (effectiveStudentCount === 2) return pricing.price_2_kurus ?? 0;
+    if (effectiveStudentCount === 3) return pricing.price_3_kurus ?? 0;
+    return pricing.price_4plus_kurus ?? 0;
+  }, [pricing, effectiveStudentCount]);
+
+  // Auto-suggested total = perSlotPerStudent × studentCount × totalSlotCount.
+  const autoTotalKurus = useMemo(
+    () => perSlotPerStudentKurus * effectiveStudentCount * totalSlotCount,
+    [perSlotPerStudentKurus, effectiveStudentCount, totalSlotCount],
+  );
+
+  // kuruş → TL string, preserving cents. Trims trailing zeros for clean
+  // display (e.g. 1550 → "15.5", 12000 → "120").
+  function kurusToTLString(k: number): string {
+    if (!k || k <= 0) return "";
+    const tl = (k / 100).toFixed(2);
+    if (tl.endsWith(".00")) return tl.slice(0, -3);
+    if (tl.endsWith("0")) return tl.slice(0, -1);
+    return tl;
+  }
+
+  // Auto-fill price field as long as the user hasn't manually edited it.
+  useEffect(() => {
+    if (priceTouched) return;
+    setPrice(kurusToTLString(autoTotalKurus));
+  }, [autoTotalKurus, priceTouched]);
+
   async function save() {
     if (!customerName.trim()) {
       Alert.alert("Eksik", "Müşteri adını gir.");
@@ -791,12 +853,15 @@ function ManualBookingModal({
     const totalKurus = price ? Math.round(parseFloat(price) * 100) : 0;
     const perTupleKurus: number[] = bookingTuples.map(() => 0);
     if (totalKurus > 0 && totalSlotCount > 0) {
+      // Floor each non-last share so the cumulative assignment can never
+      // exceed totalKurus; the last tuple absorbs the remainder and is
+      // guaranteed non-negative.
       let assigned = 0;
       bookingTuples.forEach((t, idx) => {
         if (idx === bookingTuples.length - 1) {
-          perTupleKurus[idx] = totalKurus - assigned;
+          perTupleKurus[idx] = Math.max(0, totalKurus - assigned);
         } else {
-          const share = Math.round(
+          const share = Math.floor(
             (totalKurus * t.slots.length) / totalSlotCount,
           );
           perTupleKurus[idx] = share;
@@ -1263,12 +1328,57 @@ function ManualBookingModal({
             </View>
 
             <AdminInput
-              label="Tutar (TL, opsiyonel)"
+              label="Tutar (TL)"
               value={price}
-              onChangeText={setPrice}
+              onChangeText={(t) => {
+                setPriceTouched(true);
+                setPrice(t.replace(/[^0-9.]/g, ""));
+              }}
               keyboardType="decimal-pad"
               placeholder="0"
             />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                marginTop: -2,
+              }}
+            >
+              <Text
+                style={{
+                  flex: 1,
+                  color: adminTheme.textDim,
+                  fontFamily: adminTheme.fontBody,
+                  fontSize: 11,
+                }}
+              >
+                {autoTotalKurus > 0
+                  ? `Önerilen: ${formatTRY(autoTotalKurus)} (${effectiveStudentCount} kişi × ${totalSlotCount} seans · kişi başı ${formatTRY(perSlotPerStudentKurus)})`
+                  : effectiveStudentCount > 0 && totalSlotCount > 0
+                    ? "Bu kişi sayısı için Profil > Ders Fiyatlandırması'ndan fiyat girilmemiş."
+                    : "Eğitmen, saat ve öğrenci seçince tutar otomatik hesaplanır."}
+              </Text>
+              {priceTouched && autoTotalKurus > 0 ? (
+                <Pressable
+                  onPress={() => {
+                    setPriceTouched(false);
+                    setPrice(kurusToTLString(autoTotalKurus));
+                  }}
+                  hitSlop={6}
+                >
+                  <Text
+                    style={{
+                      color: adminTheme.accent,
+                      fontFamily: adminTheme.fontTitle,
+                      fontSize: 11,
+                    }}
+                  >
+                    Sıfırla
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
             <AdminInput
               label="Not"
               value={notes}

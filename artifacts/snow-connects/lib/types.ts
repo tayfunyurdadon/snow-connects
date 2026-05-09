@@ -11,6 +11,10 @@ export interface SkiSchool {
   admin_user_id: string | null;
   status: "active" | "blocked";
   instructor_share_rate: number;
+  price_1_kurus: number;
+  price_2_kurus: number;
+  price_3_kurus: number;
+  price_4plus_kurus: number;
   created_at: string;
 }
 

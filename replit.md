@@ -340,6 +340,26 @@ Frontend:
 Apply `2026_05_phase9b_instructor_share.sql` in the Supabase SQL editor
 before the new Gelirler split / Profil oran alanı work.
 
+### School pricing tiers (Phase 10)
+
+Each ski school sets its own per-student / per-50-min price for groups of
+1, 2, 3, and 4+ students from the Profil tab. The manual booking modal
+auto-fills `Tutar` based on `pricePerStudent50min × studentCount ×
+totalSlotCount`, where `pricePerStudent50min` picks the bracket from the
+effective student count (rows with at least a first/last name). The school
+admin can still type over the suggestion; a "Sıfırla" link reverts to the
+auto value.
+
+Backend (`supabase/migrations/2026_05_phase10_school_pricing.sql`):
+
+- `ski_schools` gains `price_1_kurus`, `price_2_kurus`, `price_3_kurus`,
+  `price_4plus_kurus` (integer kuruş, default 0, non-negative).
+- New RPC `school_update_pricing(p_price_1, p_price_2, p_price_3,
+  p_price_4plus)` writes all four in one call. Auth-only.
+
+Apply this migration in the Supabase SQL editor before the new Profil
+"Ders Fiyatlandırması" card and the modal's auto-pricing work.
+
 ### Hotfix: school instructor bookable (Phase 9c)
 
 `supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
