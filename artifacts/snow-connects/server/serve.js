@@ -1,12 +1,14 @@
 /**
- * Standalone production server for Expo static builds.
+ * Production server for Snow Connects.
  *
- * Serves the output of build.js (static-build/) with two special routes:
- * - GET / or /manifest with expo-platform header → platform manifest JSON
- * - GET / without expo-platform → landing page HTML
- * Everything else falls through to static file serving from ./static-build/.
+ * Serves the React Native Web build at /, and keeps Expo Go manifest
+ * endpoints alive for mobile clients that scan the QR code at /expo-go.
  *
- * Zero external dependencies — uses only Node.js built-ins (http, fs, path).
+ * Routes:
+ *   GET / (or any web route) → web SPA (static-build/web/index.html)
+ *   GET /expo-go              → Expo Go QR landing page
+ *   GET /manifest with expo-platform header → ios/android manifest JSON
+ *   Static assets fall through to static-build/web/ then static-build/<platform>/
  */
 
 const http = require("http");
@@ -14,18 +16,21 @@ const fs = require("fs");
 const path = require("path");
 
 const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
+const WEB_ROOT = path.join(STATIC_ROOT, "web");
 const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
 const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".woff": "font/woff",
@@ -39,9 +44,9 @@ function getAppName() {
   try {
     const appJsonPath = path.resolve(__dirname, "..", "app.json");
     const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf-8"));
-    return appJson.expo?.name || "App Landing Page";
+    return appJson.expo?.name || "Snow Connects";
   } catch {
-    return "App Landing Page";
+    return "Snow Connects";
   }
 }
 
@@ -65,47 +70,55 @@ function serveManifest(platform, res) {
   res.end(manifest);
 }
 
-function serveLandingPage(req, res, landingPageTemplate, appName) {
+function serveLandingPage(req, res) {
+  if (!fs.existsSync(TEMPLATE_PATH)) {
+    res.writeHead(404);
+    res.end("Expo Go landing page template not found");
+    return;
+  }
+  const template = fs.readFileSync(TEMPLATE_PATH, "utf-8");
   const forwardedProto = req.headers["x-forwarded-proto"];
   const protocol = forwardedProto || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"];
   const baseUrl = `${protocol}://${host}`;
-  const expsUrl = `${host}`;
 
-  const html = landingPageTemplate
+  const html = template
     .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
-    .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl)
-    .replace(/APP_NAME_PLACEHOLDER/g, appName);
+    .replace(/EXPS_URL_PLACEHOLDER/g, host)
+    .replace(/APP_NAME_PLACEHOLDER/g, getAppName());
 
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(html);
 }
 
-function serveStaticFile(urlPath, res) {
-  const safePath = path.normalize(urlPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = path.join(STATIC_ROOT, safePath);
-
-  if (!filePath.startsWith(STATIC_ROOT)) {
-    res.writeHead(403);
-    res.end("Forbidden");
-    return;
+function tryServeFile(absPath, res) {
+  if (!fs.existsSync(absPath) || fs.statSync(absPath).isDirectory()) {
+    return false;
   }
-
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    res.writeHead(404);
-    res.end("Not Found");
-    return;
-  }
-
-  const ext = path.extname(filePath).toLowerCase();
+  const ext = path.extname(absPath).toLowerCase();
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
-  const content = fs.readFileSync(filePath);
+  const content = fs.readFileSync(absPath);
   res.writeHead(200, { "content-type": contentType });
   res.end(content);
+  return true;
 }
 
-const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, "utf-8");
-const appName = getAppName();
+function serveWebStaticOrIndex(pathname, res) {
+  const safe = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, "");
+  const target = path.join(WEB_ROOT, safe === "/" ? "" : safe);
+  if (target.startsWith(WEB_ROOT) && tryServeFile(target, res)) {
+    return;
+  }
+  const indexPath = path.join(WEB_ROOT, "index.html");
+  if (fs.existsSync(indexPath)) {
+    const html = fs.readFileSync(indexPath);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
+    return;
+  }
+  res.writeHead(404);
+  res.end("Not Found");
+}
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
@@ -115,21 +128,19 @@ const server = http.createServer((req, res) => {
     pathname = pathname.slice(basePath.length) || "/";
   }
 
-  if (pathname === "/" || pathname === "/manifest") {
-    const platform = req.headers["expo-platform"];
-    if (platform === "ios" || platform === "android") {
-      return serveManifest(platform, res);
-    }
-
-    if (pathname === "/") {
-      return serveLandingPage(req, res, landingPageTemplate, appName);
-    }
+  const platform = req.headers["expo-platform"];
+  if ((pathname === "/" || pathname === "/manifest") && (platform === "ios" || platform === "android")) {
+    return serveManifest(platform, res);
   }
 
-  serveStaticFile(pathname, res);
+  if (pathname === "/expo-go" || pathname === "/expo-go/") {
+    return serveLandingPage(req, res);
+  }
+
+  return serveWebStaticOrIndex(pathname, res);
 });
 
 const port = parseInt(process.env.PORT || "3000", 10);
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Serving static Expo build on port ${port}`);
+  console.log(`Serving Snow Connects on port ${port}`);
 });

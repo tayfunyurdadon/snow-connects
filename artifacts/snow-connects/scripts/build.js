@@ -556,12 +556,38 @@ async function main() {
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
 
-  console.log("Build complete! Deploy to:", baseUrl);
-
   if (metroProcess) {
+    console.log("Stopping Metro before web export...");
     metroProcess.kill();
+    metroProcess = null;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
+
+  await buildWeb();
+
+  console.log("Build complete! Deploy to:", baseUrl);
   process.exit(0);
+}
+
+function buildWeb() {
+  return new Promise((resolve, reject) => {
+    console.log("Exporting web build...");
+    const webOut = path.join(projectRoot, "static-build", "web");
+    const child = spawn(
+      "pnpm",
+      ["exec", "expo", "export", "--platform", "web", "--output-dir", webOut, "--clear"],
+      { stdio: "inherit", cwd: projectRoot, env: process.env },
+    );
+    child.on("exit", (code) => {
+      if (code === 0) {
+        console.log("Web build complete:", webOut);
+        resolve();
+      } else {
+        reject(new Error(`expo export --platform web exited with code ${code}`));
+      }
+    });
+    child.on("error", reject);
+  });
 }
 
 main().catch((error) => {
