@@ -190,14 +190,18 @@ export function AdminTabRow<T extends string>({
   options: { id: T; label: string; count?: number }[];
 }) {
   return (
-    <View
-      style={{
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{
         flexDirection: "row",
         backgroundColor: adminTheme.surfaceMuted,
         borderRadius: adminTheme.radius,
         padding: 3,
         borderWidth: 1,
         borderColor: adminTheme.border,
+        gap: 2,
+        alignSelf: "flex-start",
       }}
     >
       {options.map((o) => {
@@ -207,8 +211,8 @@ export function AdminTabRow<T extends string>({
             key={o.id}
             onPress={() => onChange(o.id)}
             style={{
-              flex: 1,
               paddingVertical: 8,
+              paddingHorizontal: 12,
               alignItems: "center",
               borderRadius: adminTheme.radius - 3,
               backgroundColor: active ? adminTheme.surfaceHi : "transparent",
@@ -218,6 +222,7 @@ export function AdminTabRow<T extends string>({
             }}
           >
             <Text
+              numberOfLines={1}
               style={{
                 color: active ? adminTheme.text : adminTheme.textMuted,
                 fontFamily: adminTheme.fontTitle,
@@ -253,7 +258,7 @@ export function AdminTabRow<T extends string>({
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
