@@ -518,11 +518,20 @@ function SlotRow({
         )}
       </View>
       {!isBlocked ? (
-        <AdminPill
-          label={isManualBooking ? "Manuel" : "Online"}
-          tone={isManualBooking ? "warning" : "info"}
-          size="sm"
-        />
+        <View style={{ alignItems: "flex-end", gap: 4 }}>
+          <AdminPill
+            label={isManualBooking ? "Manuel" : "Online"}
+            tone={isManualBooking ? "warning" : "info"}
+            size="sm"
+          />
+          {slot.payment_status ? (
+            <AdminPill
+              label={slot.payment_status === "paid" ? "Ödendi" : "Bekliyor"}
+              tone={slot.payment_status === "paid" ? "success" : "warning"}
+              size="sm"
+            />
+          ) : null}
+        </View>
       ) : null}
     </Pressable>
   );
