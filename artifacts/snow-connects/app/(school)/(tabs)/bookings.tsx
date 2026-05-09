@@ -955,34 +955,96 @@ function ManualBookingModal({
               {students.map((s, i) => (
                 <View
                   key={i}
-                  style={{ flexDirection: "row", gap: 6, marginBottom: 6 }}
+                  style={{
+                    gap: 6,
+                    marginBottom: 10,
+                    padding: 10,
+                    borderRadius: adminTheme.radiusSm,
+                    backgroundColor: adminTheme.surface,
+                    borderWidth: 1,
+                    borderColor: adminTheme.border,
+                  }}
                 >
-                  <TextInput
-                    value={s.firstName}
-                    onChangeText={(t) =>
-                      setStudents((cur) =>
-                        cur.map((x, idx) =>
-                          idx === i ? { ...x, firstName: t } : x,
-                        ),
-                      )
-                    }
-                    placeholder="Ad"
-                    placeholderTextColor={adminTheme.textDim}
-                    style={modalStyles.smallInput}
-                  />
-                  <TextInput
-                    value={s.lastName}
-                    onChangeText={(t) =>
-                      setStudents((cur) =>
-                        cur.map((x, idx) =>
-                          idx === i ? { ...x, lastName: t } : x,
-                        ),
-                      )
-                    }
-                    placeholder="Soyad"
-                    placeholderTextColor={adminTheme.textDim}
-                    style={modalStyles.smallInput}
-                  />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 2,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: adminTheme.textDim,
+                        fontFamily: adminTheme.fontBody,
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Öğrenci {i + 1}
+                    </Text>
+                    {students.length > 1 ? (
+                      <Pressable
+                        onPress={() =>
+                          setStudents((cur) =>
+                            cur.filter((_, idx) => idx !== i),
+                          )
+                        }
+                        hitSlop={8}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <Feather
+                          name="x"
+                          size={14}
+                          color={adminTheme.danger}
+                        />
+                        <Text
+                          style={{
+                            color: adminTheme.danger,
+                            fontFamily: adminTheme.fontBody,
+                            fontSize: 12,
+                          }}
+                        >
+                          Kaldır
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    <TextInput
+                      value={s.firstName}
+                      onChangeText={(t) =>
+                        setStudents((cur) =>
+                          cur.map((x, idx) =>
+                            idx === i ? { ...x, firstName: t } : x,
+                          ),
+                        )
+                      }
+                      placeholder="Ad"
+                      placeholderTextColor={adminTheme.textDim}
+                      style={modalStyles.smallInput}
+                    />
+                    <TextInput
+                      value={s.lastName}
+                      onChangeText={(t) =>
+                        setStudents((cur) =>
+                          cur.map((x, idx) =>
+                            idx === i ? { ...x, lastName: t } : x,
+                          ),
+                        )
+                      }
+                      placeholder="Soyad"
+                      placeholderTextColor={adminTheme.textDim}
+                      style={modalStyles.smallInput}
+                    />
+                  </View>
+
                   <TextInput
                     value={s.age}
                     onChangeText={(t) =>
@@ -997,22 +1059,8 @@ function ManualBookingModal({
                     placeholder="Yaş"
                     keyboardType="number-pad"
                     placeholderTextColor={adminTheme.textDim}
-                    style={[modalStyles.smallInput, { maxWidth: 60 }]}
+                    style={[modalStyles.smallInput, { width: 90, flex: 0 }]}
                   />
-                  {students.length > 1 ? (
-                    <Pressable
-                      onPress={() =>
-                        setStudents((cur) => cur.filter((_, idx) => idx !== i))
-                      }
-                      style={{
-                        width: 36,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Feather name="x" size={16} color={adminTheme.danger} />
-                    </Pressable>
-                  ) : null}
                 </View>
               ))}
               <Pressable
