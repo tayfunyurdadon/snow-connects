@@ -734,22 +734,52 @@ function ManualBookingModal({
       return;
     }
     setSaving(true);
-    const { error } = await supabase.rpc("school_create_manual_booking", {
-      p_instructor: instructorId,
-      p_date: date,
-      p_slot_times: selectedTimes,
-      p_students: studentPayload,
-      p_customer_name: customerName.trim(),
-      p_customer_phone: customerPhone.trim() || null,
-      p_notes: notes.trim() || null,
-      p_price_kurus: price ? Math.round(parseFloat(price) * 100) : 0,
+    console.log("[manual-booking] save start", {
+      instructorId,
+      date,
+      selectedTimes,
+      studentPayload,
+      price,
     });
-    setSaving(false);
-    if (error) {
-      Alert.alert("Hata", error.message);
-      return;
+    try {
+      const { data, error } = await supabase.rpc(
+        "school_create_manual_booking",
+        {
+          p_instructor: instructorId,
+          p_date: date,
+          p_slot_times: selectedTimes,
+          p_students: studentPayload,
+          p_customer_name: customerName.trim(),
+          p_customer_phone: customerPhone.trim() || null,
+          p_notes: notes.trim() || null,
+          p_price_kurus: price ? Math.round(parseFloat(price) * 100) : 0,
+        },
+      );
+      console.log("[manual-booking] rpc returned", { data, error });
+      setSaving(false);
+      if (error) {
+        const msg = error.message || "Bilinmeyen hata";
+        if (
+          typeof window !== "undefined" &&
+          typeof window.alert === "function"
+        ) {
+          window.alert(`Hata: ${msg}`);
+        } else {
+          Alert.alert("Hata", msg);
+        }
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      console.error("[manual-booking] threw", e);
+      setSaving(false);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(`Hata: ${msg}`);
+      } else {
+        Alert.alert("Hata", msg);
+      }
     }
-    onSaved();
   }
 
   return (
