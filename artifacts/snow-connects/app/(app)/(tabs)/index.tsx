@@ -16,7 +16,7 @@ import { useColors } from "@/hooks/useColors";
 import { isInSeason, getSeasonForDate } from "@/lib/season";
 import { formatDateTR } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import type { Resort } from "@/lib/types";
+import { EXPERIENCE_LEVELS, type Resort } from "@/lib/types";
 
 export default function HomeTab() {
   const { user, loading } = useAuth();
@@ -438,16 +438,79 @@ function InstructorHome() {
   const { data: bookings } = useQuery({
     queryKey: ["instructor-upcoming", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch upcoming lessons + customer + students. Time slots are
+      // not declared as a FK in the schema, so we fetch them in a
+      // second query keyed off slot_ids.
+      const { data: rows, error } = await supabase
         .from("bookings")
-        .select("*")
+        .select(
+          `id, lesson_date, total_price, source, student_count, slot_ids,
+           manual_customer_name, manual_customer_phone,
+           customer:users!customer_id(name, phone),
+           students(first_name, last_name, age, experience_level)`,
+        )
         .eq("instructor_id", user!.id)
         .eq("payment_status", "paid")
         .gte("lesson_date", new Date().toISOString().slice(0, 10))
         .order("lesson_date")
         .limit(5);
       if (error) throw error;
-      return data as { id: string; lesson_date: string; total_price: number }[];
+      type Row = {
+        id: string;
+        lesson_date: string;
+        total_price: number;
+        source: "online" | "manual";
+        student_count: number;
+        slot_ids: string[];
+        manual_customer_name: string | null;
+        manual_customer_phone: string | null;
+        customer: { name: string | null; phone: string | null } | null;
+        students:
+          | {
+              first_name: string;
+              last_name: string;
+              age: number;
+              experience_level: string;
+            }[]
+          | null;
+        slot_times?: string[];
+      };
+      // PostgREST types embedded relations as arrays; coerce to our
+      // single-object shape (we know `customer` is at most one row).
+      const list = ((rows ?? []) as unknown[]).map((r) => {
+        const row = r as Omit<Row, "customer"> & {
+          customer: { name: string | null; phone: string | null }[] | null;
+        };
+        return {
+          ...row,
+          customer:
+            Array.isArray(row.customer) && row.customer.length > 0
+              ? row.customer[0]
+              : null,
+        } as Row;
+      });
+      const allSlotIds = Array.from(
+        new Set(list.flatMap((b) => b.slot_ids ?? [])),
+      );
+      if (allSlotIds.length > 0) {
+        const { data: slots } = await supabase
+          .from("time_slots")
+          .select("id, slot_time")
+          .in("id", allSlotIds);
+        const byId = new Map(
+          (slots ?? []).map((s: { id: string; slot_time: string }) => [
+            s.id,
+            s.slot_time,
+          ]),
+        );
+        for (const b of list) {
+          b.slot_times = (b.slot_ids ?? [])
+            .map((id) => byId.get(id))
+            .filter((t): t is string => !!t)
+            .sort();
+        }
+      }
+      return list;
     },
     enabled: !!user,
   });
@@ -545,13 +608,131 @@ function InstructorHome() {
           description="Yaklaşan derslerin burada görünecek."
         />
       ) : (
-        bookings.map((b) => (
-          <Card key={b.id}>
-            <Text style={{ color: c.foreground, fontFamily: "Inter_600SemiBold" }}>
-              {formatDateTR(b.lesson_date)}
-            </Text>
-          </Card>
-        ))
+        bookings.map((b) => {
+          const customerName =
+            b.source === "manual"
+              ? b.manual_customer_name || "Manuel müşteri"
+              : b.customer?.name || "Müşteri";
+          const customerPhone =
+            b.source === "manual"
+              ? b.manual_customer_phone
+              : b.customer?.phone;
+          const slots = b.slot_times ?? [];
+          const slotLabel =
+            slots.length === 0
+              ? null
+              : slots.length === 1
+                ? slots[0]
+                : `${slots[0]} – ${slots.length} slot`;
+          return (
+            <Card key={b.id} style={{ gap: 10 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 10,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={{
+                      color: c.foreground,
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 15,
+                    }}
+                  >
+                    {formatDateTR(b.lesson_date)}
+                  </Text>
+                  {slotLabel ? (
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
+                      <Feather name="clock" size={11} /> {slotLabel}
+                      {"  ·  "}
+                      {b.student_count} öğrenci
+                    </Text>
+                  ) : (
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
+                      {b.student_count} öğrenci
+                    </Text>
+                  )}
+                </View>
+                {b.source === "manual" ? (
+                  <View
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 999,
+                      backgroundColor: c.muted,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontSize: 10,
+                        fontFamily: "Inter_600SemiBold",
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      MANUEL
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View
+                style={{
+                  borderTopWidth: 1,
+                  borderTopColor: c.border,
+                  paddingTop: 10,
+                  gap: 6,
+                }}
+              >
+                <Text
+                  style={{
+                    color: c.foreground,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  {customerName}
+                </Text>
+                {customerPhone ? (
+                  <Text style={{ color: c.mutedForeground, fontSize: 12 }}>
+                    <Feather name="phone" size={11} /> {customerPhone}
+                  </Text>
+                ) : null}
+
+                {(b.students ?? []).length > 0 ? (
+                  <View style={{ marginTop: 4, gap: 3 }}>
+                    {(b.students ?? []).map((s, idx) => (
+                      <Text
+                        key={idx}
+                        style={{ color: c.mutedForeground, fontSize: 12 }}
+                      >
+                        • {s.first_name} {s.last_name} ({s.age} yaş,{" "}
+                        {EXPERIENCE_LEVELS.find(
+                          (e) => e.value === s.experience_level,
+                        )?.label ?? s.experience_level})
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            </Card>
+          );
+        })
       )}
     </Screen>
   );
