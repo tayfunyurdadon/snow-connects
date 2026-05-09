@@ -651,15 +651,14 @@ function ManualBookingModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  // Multi-day support: customers often book the same instructor across
-  // 2-3-4 consecutive days. State is keyed by ISO date so each day has
-  // its own slot selection, but the instructor is shared across all
-  // selected dates (one booking flow = one instructor across all days).
+  // Multi-day, multi-instructor support: a single "reservation flow" can
+  // mix slots from different instructors across multiple days. Each
+  // (date, instructor) tuple becomes a separate booking row at save
+  // time. Selection shape: { [dateIso]: { [instructorId]: string[] } }.
   const [dates, setDates] = useState<string[]>([initialDate]);
-  const [selectedTimesByDate, setSelectedTimesByDate] = useState<
-    Record<string, string[]>
+  const [selections, setSelections] = useState<
+    Record<string, Record<string, string[]>>
   >({});
-  const [instructorId, setInstructorId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -705,9 +704,9 @@ function ManualBookingModal({
   function toggleDate(iso: string) {
     setDates((cur) => {
       if (cur.includes(iso)) {
-        // Removing a date also drops its slot selection.
-        setSelectedTimesByDate((stm) => {
-          const { [iso]: _, ...rest } = stm;
+        // Removing a date also drops its slot selections.
+        setSelections((sel) => {
+          const { [iso]: _, ...rest } = sel;
           return rest;
         });
         const next = cur.filter((x) => x !== iso);
@@ -718,30 +717,45 @@ function ManualBookingModal({
   }
 
   function pickSlot(insId: string, dateIso: string, slot: string) {
-    // If switching to a different instructor, clear ALL prior selections
-    // across every date and start fresh with this single slot.
-    if (instructorId && insId !== instructorId) {
-      setInstructorId(insId);
-      setSelectedTimesByDate({ [dateIso]: [slot] });
-      return;
-    }
-    if (!instructorId) setInstructorId(insId);
-    setSelectedTimesByDate((cur) => {
-      const cur1 = cur[dateIso] ?? [];
-      const next = cur1.includes(slot)
-        ? cur1.filter((x) => x !== slot)
-        : [...cur1, slot].sort();
-      const out = { ...cur, [dateIso]: next };
-      // If this date now has zero slots, prune the key for cleanliness.
-      if (next.length === 0) delete out[dateIso];
+    setSelections((cur) => {
+      const dayMap = { ...(cur[dateIso] ?? {}) };
+      const arr = dayMap[insId] ?? [];
+      const next = arr.includes(slot)
+        ? arr.filter((x) => x !== slot)
+        : [...arr, slot].sort();
+      if (next.length === 0) {
+        delete dayMap[insId];
+      } else {
+        dayMap[insId] = next;
+      }
+      const out = { ...cur };
+      if (Object.keys(dayMap).length === 0) {
+        delete out[dateIso];
+      } else {
+        out[dateIso] = dayMap;
+      }
       return out;
     });
   }
 
+  // All (date, instructor, slots[]) tuples that the user has picked.
+  // Each tuple becomes one booking row at save time.
+  const bookingTuples = useMemo(() => {
+    const out: { date: string; instructorId: string; slots: string[] }[] = [];
+    Object.keys(selections)
+      .sort()
+      .forEach((d) => {
+        const dayMap = selections[d];
+        Object.keys(dayMap).forEach((insId) => {
+          out.push({ date: d, instructorId: insId, slots: dayMap[insId] });
+        });
+      });
+    return out;
+  }, [selections]);
+
   const totalSlotCount = useMemo(
-    () =>
-      Object.values(selectedTimesByDate).reduce((a, arr) => a + arr.length, 0),
-    [selectedTimesByDate],
+    () => bookingTuples.reduce((a, t) => a + t.slots.length, 0),
+    [bookingTuples],
   );
 
   async function save() {
@@ -749,12 +763,8 @@ function ManualBookingModal({
       Alert.alert("Eksik", "Müşteri adını gir.");
       return;
     }
-    if (totalSlotCount === 0) {
-      Alert.alert("Eksik", "En az bir seans seç.");
-      return;
-    }
-    if (!instructorId) {
-      Alert.alert("Eksik", "Eğitmen seç.");
+    if (bookingTuples.length === 0) {
+      Alert.alert("Eksik", "En az bir eğitmen + saat seç.");
       return;
     }
     const studentPayload = students
@@ -770,21 +780,21 @@ function ManualBookingModal({
       return;
     }
 
-    // Split price across the days proportionally to slot counts so each
-    // booking gets its share. Remainder goes to the first day.
+    // Split price across the (date, instructor) tuples proportionally to
+    // slot counts so each booking row gets its share. Remainder goes to
+    // the last tuple.
     const totalKurus = price ? Math.round(parseFloat(price) * 100) : 0;
-    const datesToBook = Object.keys(selectedTimesByDate).sort();
-    const perDateKurus: Record<string, number> = {};
+    const perTupleKurus: number[] = bookingTuples.map(() => 0);
     if (totalKurus > 0 && totalSlotCount > 0) {
       let assigned = 0;
-      datesToBook.forEach((d, idx) => {
-        if (idx === datesToBook.length - 1) {
-          perDateKurus[d] = totalKurus - assigned;
+      bookingTuples.forEach((t, idx) => {
+        if (idx === bookingTuples.length - 1) {
+          perTupleKurus[idx] = totalKurus - assigned;
         } else {
           const share = Math.round(
-            (totalKurus * selectedTimesByDate[d].length) / totalSlotCount,
+            (totalKurus * t.slots.length) / totalSlotCount,
           );
-          perDateKurus[d] = share;
+          perTupleKurus[idx] = share;
           assigned += share;
         }
       });
@@ -792,28 +802,27 @@ function ManualBookingModal({
 
     setSaving(true);
     console.log("[manual-booking] save start", {
-      instructorId,
-      datesToBook,
-      selectedTimesByDate,
+      bookingTuples,
       studentPayload,
       totalKurus,
     });
     try {
       // Sequential so a partial failure stops cleanly with a clear error.
-      for (const d of datesToBook) {
+      for (let i = 0; i < bookingTuples.length; i++) {
+        const t = bookingTuples[i];
         const { error } = await supabase.rpc("school_create_manual_booking", {
-          p_instructor: instructorId,
-          p_date: d,
-          p_slot_times: selectedTimesByDate[d],
+          p_instructor: t.instructorId,
+          p_date: t.date,
+          p_slot_times: t.slots,
           p_students: studentPayload,
           p_customer_name: customerName.trim(),
           p_customer_phone: customerPhone.trim() || null,
           p_notes: notes.trim() || null,
-          p_price_kurus: perDateKurus[d] ?? 0,
+          p_price_kurus: perTupleKurus[i] ?? 0,
         });
         if (error) {
           setSaving(false);
-          const msg = `${d}: ${error.message || "Bilinmeyen hata"}`;
+          const msg = `${t.date}: ${error.message || "Bilinmeyen hata"}`;
           if (
             typeof window !== "undefined" &&
             typeof window.alert === "function"
@@ -926,9 +935,9 @@ function ManualBookingModal({
                 Eğitmen ve müsait saatler *
               </Text>
               <Text style={[modalStyles.helperText, { marginBottom: 8 }]}>
-                Her gün için aynı eğitmenden müsait saatleri seç. Başka bir
-                eğitmenin saatine basarsan tüm seçim sıfırlanır (tek
-                rezervasyon = tek eğitmen).
+                Aynı müşteri için farklı saatlerde farklı eğitmenlerden
+                ders alabilirsin. Her (eğitmen + gün) için ayrı bir
+                rezervasyon kaydı oluşur.
               </Text>
               {loadingAny ? (
                 <Text style={modalStyles.helperText}>Yükleniyor…</Text>
@@ -972,13 +981,15 @@ function ManualBookingModal({
                     ) : null}
 
                     {insList.map((ins) => {
-                      const isPicked = ins.instructor_id === instructorId;
+                      const dateIso = dIso;
+                      const insSelections =
+                        selections[dateIso]?.[ins.instructor_id] ?? [];
+                      const isPicked = insSelections.length > 0;
                       const freeSlots = ins.slots
                         .filter((s) => s.status === "available")
                         .map((s) => s.slot_time)
                         .sort();
                       const allBlocked = freeSlots.length === 0;
-                      const dateIso = dIso;
                     return (
                       <View
                         key={ins.instructor_id}
@@ -1026,14 +1037,18 @@ function ManualBookingModal({
                             style={{
                               color: allBlocked
                                 ? adminTheme.danger
-                                : adminTheme.textDim,
+                                : isPicked
+                                  ? adminTheme.accent
+                                  : adminTheme.textDim,
                               fontFamily: adminTheme.fontBody,
                               fontSize: 11,
                             }}
                           >
                             {allBlocked
                               ? "müsait değil"
-                              : `${freeSlots.length} boş saat`}
+                              : isPicked
+                                ? `${insSelections.length} seçildi`
+                                : `${freeSlots.length} boş saat`}
                           </Text>
                         </View>
 
@@ -1046,11 +1061,7 @@ function ManualBookingModal({
                             }}
                           >
                             {freeSlots.map((t) => {
-                              const sel =
-                                isPicked &&
-                                (selectedTimesByDate[dateIso] ?? []).includes(
-                                  t,
-                                );
+                              const sel = insSelections.includes(t);
                               return (
                                 <Pressable
                                   key={t}
