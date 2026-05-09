@@ -12,13 +12,20 @@ import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
 import { useColors } from "@/hooks/useColors";
 import { formatTRY } from "@/lib/format";
-import { pickTierKurus, withVat } from "@/lib/pricing";
+import { effectiveTieredProfile, pickTierKurus, withVat } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import type { AppUser, InstructorProfile, Resort } from "@/lib/types";
 
+type SchoolPriceColumns = {
+  price_1_kurus: number | null;
+  price_2_kurus: number | null;
+  price_3_kurus: number | null;
+  price_4plus_kurus: number | null;
+};
+
 type Row = InstructorProfile & {
   user: Pick<AppUser, "id" | "name">;
-  school?: { id: string; name: string } | null;
+  school?: ({ id: string; name: string } & SchoolPriceColumns) | null;
 };
 
 export default function ResortInstructors() {
@@ -45,7 +52,7 @@ export default function ResortInstructors() {
       const { data, error } = await supabase
         .from("instructor_profiles")
         .select(
-          "*, user:users!inner(id, name, status, role), school:ski_schools(id, name)",
+          "*, user:users!inner(id, name, status, role), school:ski_schools(id, name, price_1_kurus, price_2_kurus, price_3_kurus, price_4plus_kurus)",
         )
         .contains("resort_ids", [id])
         // Only verified instructors are bookable. RLS already hides
@@ -121,12 +128,15 @@ function InstructorCard({
 }) {
   const c = useColors();
   const initial = (row.user.name || "?").slice(0, 1).toUpperCase();
-  const price1 = withVat(pickTierKurus(row, 1));
-  const price2 = withVat(pickTierKurus(row, 2));
+  // School-affiliated instructors price from their school's tariff
+  // (Phase 10/15) — same rule as the profile and book screens.
+  const effective = effectiveTieredProfile(row, row.school ?? null);
+  const price1 = withVat(pickTierKurus(effective, 1));
+  const price2 = withVat(pickTierKurus(effective, 2));
   // "3+ kişi" represents the rate any group of 3 or more pays. We surface
   // the 4+ tier (the floor) so customers see the lowest-per-person price
   // they'll get once their party crosses three.
-  const price3plus = withVat(pickTierKurus(row, 4));
+  const price3plus = withVat(pickTierKurus(effective, 4));
   const rating = row.rating ?? 5;
   return (
     <Card onPress={onPress} padding={18}>
