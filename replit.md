@@ -178,167 +178,128 @@ Test admin (seeded via `auth.admin.createUser` using `SUPABASE_SECRET_KEY`):
 - password: `admin123`
 - role: `admin` (id `793cbd02-08f3-43bf-8316-a3596c853b1a`)
 
-### Disputes (refunds workflow)
+### Disputes (refunds workflow) — Phase 5
 
-Customers can file a dispute on a paid booking once the lesson date has
-arrived. One dispute per booking. The card with the "Sorun Bildir" CTA and
-the status panel both live in `app/(app)/booking-detail/[bookingId].tsx`.
+`supabase/migrations/2026_05_phase5_disputes.sql`: disputes table + RLS,
+`payouts.status` extended with `cancelled`, RPCs `file_dispute(uuid,text,
+text)` and `admin_resolve_dispute(uuid,text,integer,text)`. One dispute
+per paid booking, file-able from the lesson date onward via the
+"Sorun Bildir" CTA in `app/(app)/booking-detail/[bookingId].tsx`. Admins
+review from Operasyon → "İtirazlar" sub-tab (badge counts pending);
+approve sets a refund amount (TL, capped at `total_price`), frees slots,
+marks the booking refunded, and cancels any pending payout. Reject keeps
+funds with the instructor. Decisions write a customer-facing note.
 
-Admins review pending disputes from `(admin)/(tabs)/operations.tsx` →
-"İtirazlar" sub-tab (badge counts pending). Approve sets a refund amount
-(in TL, capped at booking `total_price`), frees the slots, marks the
-booking refunded, and cancels any pending payout. Reject keeps the funds
-with the instructor. Both decisions write a customer-facing note.
+### Test-mode payouts fix — Phase 6
 
-### Test-mode payouts fix
+`supabase/migrations/2026_05_phase6_payouts_fix.sql`: when
+`app_config.test_mode = true`, `create_booking()` auto-pays inline; the
+original forgot to insert a `payouts` row, so instructors saw zero
+earnings. The migration inserts the payout inline (release_date =
+lesson_date + 21 business days, matching `confirm_payment`) and
+backfills payouts for any already-paid booking missing one.
+`schema.sql` carries the same fix for fresh installs.
 
-When `app_config.test_mode = true`, `create_booking()` skips the `/payment`
-screen and writes `payment_status = 'paid'` inline. The original version
-forgot to also insert a `payouts` row, so instructors saw zero earnings for
-auto-paid bookings. `supabase/migrations/2026_05_phase6_payouts_fix.sql`
-fixes the function to insert the payout inline (release date = lesson date
-+ 21 business days, matching `confirm_payment()`) and backfills payouts for
-any already-paid booking that's missing one. `schema.sql` carries the same
-fix for fresh installs.
+### Ski schools — Phase 8
 
-### Ski schools (Phase 8)
+`supabase/migrations/2026_05_phase8_ski_schools.sql` introduces the
+`school_admin` role and the school revenue model. Schools own a roster
+of instructors and receive payouts to a single school IBAN.
 
-Schools own a roster of instructors and receive payouts to a single school
-IBAN. New role `school_admin` manages a school's instructors and revenue.
-
-Backend lives in `supabase/migrations/2026_05_phase8_ski_schools.sql`:
-
-- New table `ski_schools` (name, slug, description, iban, iban_holder_name,
-  admin_user_id, status).
-- `users.role` check expanded with `school_admin`.
-- `instructor_profiles.school_id` + `school_approval_status` (`pending`,
-  `approved`, `rejected`). Instructors affiliated with a school skip the
-  platform-level `instructor_verification` flow; their school admin
-  approves them instead. `verification_status` is auto-set in lockstep so
-  the existing customer-facing `verification_status='approved'` filter
-  keeps working.
-- `payouts.recipient_type` (`instructor` | `school`) +
-  `payouts.recipient_id`. `create_booking` (test_mode auto-pay path) and
-  `confirm_payment` both route the payout to the school when the
-  instructor has a `school_id`. RLS on `payouts` allows the school admin
-  to read their own school's payouts.
-- `handle_new_user()` trigger reads optional `school_id` from
+- New table `ski_schools` (name, slug, description, iban,
+  iban_holder_name, admin_user_id, status). `users.role` check expanded
+  with `school_admin`.
+- `instructor_profiles.school_id` + `school_approval_status`
+  (`pending`/`approved`/`rejected`). School-affiliated instructors skip
+  the platform `instructor_verification` flow; their school admin
+  approves them and `verification_status` is kept in lockstep so the
+  customer-facing `verification_status='approved'` filter keeps working.
+- `payouts.recipient_type` (`instructor`|`school`) + `recipient_id`.
+  `create_booking` (test_mode auto-pay path) and `confirm_payment` route
+  the payout to the school when the instructor has a `school_id`. RLS
+  lets school admins read their own school's payouts.
+- `handle_new_user()` reads optional `school_id` from
   `auth.users.raw_user_meta_data` so an instructor can affiliate at
-  signup time.
+  signup.
 - RPCs: `school_list_instructors`, `school_set_instructor_status`,
-  `school_payouts_summary`, `school_update_profile`, `admin_upsert_school`,
-  `admin_delete_school`, `admin_set_school_status`, `admin_search_users`.
-  All school RPCs check `is_school_admin()`; admin RPCs check
-  `is_admin()`.
+  `school_payouts_summary`, `school_update_profile`,
+  `admin_upsert_school`, `admin_delete_school`,
+  `admin_set_school_status`, `admin_search_users`. All school RPCs
+  check `is_school_admin()`; admin RPCs check `is_admin()`.
 
-Frontend:
-
-- `(school)/(tabs)` route group (gated to `school_admin`) with four tabs:
-  Eğitmenler (approve/reject), Rezervasyonlar, Gelirler (with pending /
-  released summary tiles), Profil (edit name/desc/IBAN).
-- `(auth)/login.tsx` and `(app)/_layout.tsx` redirect `school_admin`
-  users to `/(school)/(tabs)`.
-- `(auth)/register.tsx`: when `Hesap türü = Eğitmen`, an optional
-  "Kayak okulu" dropdown lists active schools. School-affiliated
-  instructors skip the platform verification screen and land in the
-  instructor panel right away.
-- Customer-facing instructor cards (`resort/[id].tsx` and
-  `instructor/[id].tsx`) show a small school badge under the name when
-  the instructor is affiliated.
-- Admin → Sistem → "Okullar" sub-tab provides full CRUD: create / edit /
-  delete schools, search any user by email to assign as the school
-  admin (`admin_search_users`).
+Frontend: `(school)/(tabs)` route group (gated to `school_admin`) with
+four tabs — Eğitmenler (approve/reject), Rezervasyonlar, Gelirler
+(pending/released tiles), Profil (name/desc/IBAN). Auth and app layouts
+redirect `school_admin` users into `/(school)/(tabs)`. Register screen
+adds an optional "Kayak okulu" dropdown for instructors. Customer
+instructor cards show a small school badge. Admin → Sistem → "Okullar"
+sub-tab provides full CRUD with user search to assign the school admin.
 
 Test data (`seed-schools.mjs`, run with `SUPABASE_SECRET_KEY` env):
+`s@snow.com` / `123456` is the school_admin of "Snow Academy";
+`i2@snow.com`, `i3@snow.com`, `i4@snow.com` are attached and approved;
+`i@snow.com`, `i1@snow.com` stay independent. The seed script must run
+*after* the phase8 migration is applied.
 
-- `s@snow.com` / `123456` — school_admin of "Snow Academy"
-- `i2@snow.com`, `i3@snow.com`, `i4@snow.com` are attached to Snow
-  Academy with `school_approval_status='approved'`. `i@snow.com` and
-  `i1@snow.com` stay independent (platform-verified) for comparison.
+### Manual bookings + unified school calendar — Phase 9
 
-The seed script must be run *after* the phase8 migration is applied in
-the Supabase SQL editor — otherwise it fails with "Could not find the
-table 'public.ski_schools'".
-
-### Manual bookings + unified school calendar (Phase 9)
-
-School admins can enter walk-in / phone reservations directly. Online and
-manual bookings live in the same `bookings` table and share the same slot
-locking, so a single calendar shows both.
-
-Backend (`supabase/migrations/2026_05_phase9_manual_bookings.sql`):
+`supabase/migrations/2026_05_phase9_manual_bookings.sql` lets school
+admins enter walk-in / phone reservations directly; online and manual
+bookings live in the same `bookings` table and share slot locking, so a
+single Takvim view shows both.
 
 - `bookings.source text default 'online' check in ('online','manual')`,
   `manual_customer_name`, `manual_customer_phone`, `manual_notes`.
-  `customer_id` is now nullable (manual bookings have no app user).
-- RPC `school_create_manual_booking(instructor, date, slot_times[],
-  students json, customer_name, customer_phone, notes, price_kurus)` —
-  validates the instructor belongs to the caller's school, locks slots
-  the same way `create_booking` does, inserts a booking with
-  `source='manual'`, `payment_status='paid'`, and **no payout row** (the
-  school collected the money).
-- RPC `school_delete_manual_booking(id)` — only manual bookings of the
-  caller's school's instructors. Frees the slots.
-- RPC `school_day_calendar(date)` — returns one row per (instructor,
-  slot) for the day with merged booking + students info; used by the
-  Takvim tab.
-- RLS: school admins can read `students` rows of their school's bookings.
+  `customer_id` is now nullable.
+- RPCs (signatures evolved later, see Phases 9b/12):
+  `school_create_manual_booking(...)` — validates instructor belongs to
+  caller's school, locks slots the same way `create_booking` does,
+  inserts a manual booking row.
+  `school_delete_manual_booking(id)` — only manual bookings of the
+  caller's school's instructors; frees the slots.
+  `school_day_calendar(date)` — one row per (instructor, slot) for the
+  day, with booking + students info merged in.
+- RLS: school admins can read `students` of their school's bookings.
 
-Frontend:
+Frontend: `(school)/(tabs)/bookings.tsx` is the unified "Günlük Takvim"
+(14-day date strip, single **"Yeni Rezervasyon"** button, read-only
+instructor cards beneath showing the day's bookings + blocked slots,
+multi-hour lessons collapsed into one row with Manuel/Online pill).
+Tapping a booked entry opens a detail modal with delete (and, after
+Phase 12, payment-toggle) actions for manual ones. The new-reservation
+modal: pick date → pick slot(s) → eğitmen list is filtered live to
+those free for every chosen slot (reuses `school_day_calendar`) → fill
+customer + students → save.
 
-- `(school)/(tabs)/bookings.tsx` is now the unified Takvim screen
-  (calendar icon, header "Günlük Takvim"). 14-day date strip, then a
-  single **"Yeni Rezervasyon"** button that opens the centralized
-  manual-booking modal — and **read-only** instructor cards beneath
-  showing only that day's actual bookings (and any blocked slots).
-  Each booked entry collapses multi-hour lessons into one row
-  (`09:00 – 11:50`) with customer + student names + Manuel/Online pill.
-  Tap a booked entry → detail modal with delete action for manual ones.
-- The new-reservation modal is centralized: pick date → pick slot(s) →
-  the eğitmen list is filtered live to those free for every chosen slot
-  (`school_day_calendar` is reused for availability) → fill customer +
-  students → save. Slots that no instructor is free for are disabled.
+### Revenue split — Phase 9b
 
-The phase9 migration must be pasted into the Supabase SQL editor before
-the Takvim tab works.
-
-### Revenue split (Phase 9b)
-
-Each ski school splits revenue between instructor and school. Default is
-**35% instructor / 65% school**. The school admin changes the rate from
-the Profil tab.
-
-Backend (`supabase/migrations/2026_05_phase9b_instructor_share.sql`):
+`supabase/migrations/2026_05_phase9b_instructor_share.sql`: each school
+splits revenue between instructor and school (default **35% instructor
+/ 65% school**, editable from Profil).
 
 - `ski_schools.instructor_share_rate numeric default 0.35
   check (>=0 and <=1)`.
-- Manual bookings now also create a `payouts` row (status='released',
-  release_date=lesson_date, recipient='school'). Without this, manual
-  income would be invisible in the Gelirler split. Skipped only when the
-  manual booking has no price entered.
+- Manual bookings now also create a `payouts` row (status `released`,
+  release_date = lesson_date, recipient `school`) so manual income
+  shows up in the Gelirler split. Skipped only when no price was
+  entered. (Phase 12 later changes this to skip the payout when the
+  manual booking is `pending` instead of `paid`.)
 - `school_create_manual_booking` and `school_delete_manual_booking`
   updated in-place; signatures unchanged. Delete also removes the
   paired payout row.
 - `school_payouts_summary` now returns `instructorShareRate` plus split
   totals (`pendingInstructorKurus`, `pendingSchoolKurus`,
   `releasedInstructorKurus`, `releasedSchoolKurus`).
-- New `school_instructor_breakdown()` RPC returns per-instructor totals
+- New RPC `school_instructor_breakdown()` — per-instructor totals
   (lesson count, gross, instructor share, school share).
-- New `school_update_share_rate(p_rate numeric)` RPC for the Profil tab.
+- New RPC `school_update_share_rate(p_rate numeric)` for Profil.
 
-Frontend:
-
-- Gelirler tab: top card shows total revenue with a stacked split bar
-  (school vs instructor) + two split tiles. Below that the existing
-  Bekleyen / Tahsil edildi tiles, then a per-instructor breakdown card
-  (lesson count, total, instructor share), then the per-payout history
-  with each row tagged Online / Manuel and an "Eğitmen X TL" pill.
-- Profil tab: new "Gelir Paylaşımı" card with a percentage input. Shows
-  live preview of the split. Save runs `school_update_profile` and
-  `school_update_share_rate` together.
-
-Apply `2026_05_phase9b_instructor_share.sql` in the Supabase SQL editor
-before the new Gelirler split / Profil oran alanı work.
+Frontend: Gelirler top card shows total revenue with a stacked split
+bar (school vs instructor) + two split tiles, then Bekleyen/Tahsil
+tiles, then per-instructor breakdown, then per-payout history with
+Online/Manuel + "Eğitmen X TL" pill on each row. Profil gains a
+"Gelir Paylaşımı" card with percentage input + live preview; Save runs
+`school_update_profile` and `school_update_share_rate` together.
 
 ### School pricing tiers (Phase 10)
 
@@ -437,35 +398,18 @@ Backend (`supabase/migrations/2026_05_phase13_admin_school_payouts.sql`):
 Apply this migration in the Supabase SQL editor before opening the
 Operasyon → Okul Ödemeleri tab.
 
-### Hotfix: school instructor bookable (Phase 9c)
+### Hotfix: school instructor bookable — Phase 9c
 
 `supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
-fixes a customer-blocking bug: instructors registered through the app
-with a school dropdown selection landed with
-`verification_status='pending_documents'` even though their school had
-auto-approved them. `create_booking` then refused with "instructor not
-verified". The migration:
-
-- Backfills `verification_status='approved'` on existing rows where
-  `school_id is not null and school_approval_status='approved'`.
-- Updates `handle_new_user()` so a new instructor with `school_id` in
-  signup metadata lands with `verification_status='approved'` +
-  `school_approval_status='approved'` immediately. Independent
-  instructors still default to `pending_documents`.
-- Loosens `create_booking()`'s verification gate to accept either
-  platform-approved verification or an approved school affiliation
-  (defence in depth).
-
-Apply this migration in the Supabase SQL editor; the booking screen's
-"Onayla" button works again afterwards.
-
-### Disputes (refunds workflow)
-
-Backend lives in `supabase/migrations/2026_05_phase5_disputes.sql`
-(disputes table + RLS, `payouts.status` extended with `cancelled`, RPCs
-`file_dispute(uuid,text,text)` and
-`admin_resolve_dispute(uuid,text,integer,text)`). Migration must be
-pasted into the Supabase SQL editor before the UI works.
+fixes a customer-blocking bug: instructors registered with a school
+dropdown selection landed with `verification_status='pending_documents'`
+even though their school had auto-approved them, so `create_booking`
+refused with "instructor not verified". The migration backfills
+`verification_status='approved'` for existing school-approved rows,
+updates `handle_new_user()` so new school-affiliated signups land
+approved on both axes (independents still default to
+`pending_documents`), and loosens `create_booking()`'s verification
+gate to accept either platform approval or approved school affiliation.
 
 ## Workspace conventions
 
