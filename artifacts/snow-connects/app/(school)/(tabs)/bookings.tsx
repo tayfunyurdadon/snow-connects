@@ -99,6 +99,31 @@ export default function SchoolCalendar() {
     onSuccess: () => {
       setDetailSlot(null);
       qc.invalidateQueries({ queryKey: ["school-calendar"] });
+      // Manual delete also drops the paired payout row, so refresh
+      // Gelirler-related caches.
+      qc.invalidateQueries({ queryKey: ["school-summary"] });
+      qc.invalidateQueries({ queryKey: ["school-payouts"] });
+      qc.invalidateQueries({ queryKey: ["school-instructor-breakdown"] });
+    },
+    onError: (e: Error) => Alert.alert("Hata", e.message),
+  });
+
+  const setPayMutation = useMutation({
+    mutationFn: async (vars: { id: string; status: "paid" | "pending" }) => {
+      const { error } = await supabase.rpc(
+        "school_set_manual_payment_status",
+        { p_booking_id: vars.id, p_status: vars.status },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // Refresh both the day calendar and the Gelirler view, since
+      // toggling pay status creates/drops a payout row.
+      qc.invalidateQueries({ queryKey: ["school-calendar"] });
+      qc.invalidateQueries({ queryKey: ["school-summary"] });
+      qc.invalidateQueries({ queryKey: ["school-payouts"] });
+      qc.invalidateQueries({ queryKey: ["school-instructor-breakdown"] });
+      setDetailSlot(null);
     },
     onError: (e: Error) => Alert.alert("Hata", e.message),
   });
@@ -259,6 +284,9 @@ export default function SchoolCalendar() {
           instructorName={detailSlot.instructor.instructor_name}
           onClose={() => setDetailSlot(null)}
           onDelete={(bid) => deleteManual.mutate(bid)}
+          onTogglePay={(bid, status) =>
+            setPayMutation.mutate({ id: bid, status })
+          }
         />
       ) : null}
     </AdminScreen>
@@ -505,12 +533,16 @@ function SlotDetailModal({
   instructorName,
   onClose,
   onDelete,
+  onTogglePay,
 }: {
   slot: SchoolCalendarSlot;
   instructorName: string;
   onClose: () => void;
   onDelete: (bookingId: string) => void;
+  onTogglePay: (bookingId: string, status: "paid" | "pending") => void;
 }) {
+  const isManual = slot.source === "manual";
+  const isPaid = slot.payment_status === "paid";
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={modalStyles.backdrop}>
@@ -544,8 +576,8 @@ function SlotDetailModal({
             />
             {slot.payment_status ? (
               <AdminPill
-                label={slot.payment_status}
-                tone={slot.payment_status === "paid" ? "success" : "warning"}
+                label={isPaid ? "Ödendi" : "Bekliyor"}
+                tone={isPaid ? "success" : "warning"}
                 size="sm"
               />
             ) : null}
@@ -587,11 +619,25 @@ function SlotDetailModal({
             </Text>
           ))}
 
+          {isManual && slot.booking_id ? (
+            <View style={{ marginTop: 14 }}>
+              <AdminButton
+                label={isPaid ? "Beklemeye al" : "Ödendi olarak işaretle"}
+                tone={isPaid ? "ghost" : "accent"}
+                icon={isPaid ? "rotate-ccw" : "check-circle"}
+                onPress={() => {
+                  if (slot.booking_id)
+                    onTogglePay(slot.booking_id, isPaid ? "pending" : "paid");
+                }}
+              />
+            </View>
+          ) : null}
+
           <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
             <View style={{ flex: 1 }}>
               <AdminButton label="Kapat" tone="ghost" onPress={onClose} />
             </View>
-            {slot.source === "manual" && slot.booking_id ? (
+            {isManual && slot.booking_id ? (
               <View style={{ flex: 1 }}>
                 <AdminButton
                   label="Sil"
@@ -669,6 +715,9 @@ function ManualBookingModal({
   const [notes, setNotes] = useState("");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<"paid" | "pending">(
+    "pending",
+  );
   const [students, setStudents] = useState<StudentDraft[]>([
     { firstName: "", lastName: "", age: "" },
   ]);
@@ -889,6 +938,7 @@ function ManualBookingModal({
           p_customer_phone: customerPhone.trim() || null,
           p_notes: notes.trim() || null,
           p_price_kurus: perTupleKurus[i] ?? 0,
+          p_payment_status: paymentStatus,
         });
         if (error) {
           setSaving(false);
@@ -1379,6 +1429,60 @@ function ManualBookingModal({
                 </Pressable>
               ) : null}
             </View>
+            <View>
+              <Text
+                style={{
+                  color: adminTheme.textDim,
+                  fontFamily: adminTheme.fontTitle,
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.6,
+                  marginBottom: 6,
+                }}
+              >
+                Ödeme Durumu
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {(
+                  [
+                    { key: "pending", label: "Bekliyor" },
+                    { key: "paid", label: "Ödendi" },
+                  ] as const
+                ).map((opt) => {
+                  const active = paymentStatus === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => setPaymentStatus(opt.key)}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: adminTheme.radiusSm,
+                        borderWidth: 1,
+                        borderColor: active
+                          ? adminTheme.accent
+                          : adminTheme.border,
+                        backgroundColor: active
+                          ? adminTheme.accentSoft
+                          : "transparent",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: active ? adminTheme.accent : adminTheme.text,
+                          fontFamily: adminTheme.fontTitle,
+                          fontSize: 13,
+                        }}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
             <AdminInput
               label="Not"
               value={notes}

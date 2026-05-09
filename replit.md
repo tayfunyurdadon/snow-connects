@@ -383,6 +383,38 @@ Frontend:
 
 Apply this migration in the Supabase SQL editor.
 
+### Manual booking payment status (Phase 12)
+
+School admins can now track whether a manual (walk-in / phone) booking
+has actually been paid. The status is stored on `bookings.payment_status`
+(`paid` | `pending`) and is editable from two places:
+
+- The "Yeni Rezervasyon" modal has an "Ödeme Durumu" segmented control
+  (Bekliyor / Ödendi). Default is **Bekliyor**.
+- The slot detail modal in the Takvim shows the current status pill in
+  Turkish (Ödendi / Bekliyor) and a button to flip it
+  ("Ödendi olarak işaretle" / "Beklemeye al").
+
+A `payouts` row is created **only when the booking is paid** and
+`total_price > 0`. Toggling pending → paid inserts the payout (status
+`released`, release_date = lesson_date, recipient = `school`). Toggling
+paid → pending deletes the payout. This keeps the Gelirler tab honest:
+pending manual bookings do not count toward collected revenue, neither
+in the school/instructor split nor in the online/manuel source split.
+
+Backend (`supabase/migrations/2026_05_phase12_manual_payment_status.sql`):
+
+- `school_create_manual_booking` gains `p_payment_status text default
+  'paid'` (default keeps the previous behaviour for any older client).
+  Skips the payout insert when status is `'pending'`.
+- New RPC `school_set_manual_payment_status(p_booking_id uuid, p_status
+  text)` — verifies caller is the school admin owning the booking's
+  instructor, updates `payment_status`, and creates/deletes the payout
+  row accordingly.
+
+Apply this migration in the Supabase SQL editor before the new
+"Ödeme Durumu" controls work.
+
 ### Hotfix: school instructor bookable (Phase 9c)
 
 `supabase/migrations/2026_05_phase9c_school_instructor_booking_fix.sql`
