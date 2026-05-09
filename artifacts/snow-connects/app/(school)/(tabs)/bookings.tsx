@@ -1,5 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -646,8 +651,14 @@ function ManualBookingModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [date, setDate] = useState<string>(initialDate);
-  const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
+  // Multi-day support: customers often book the same instructor across
+  // 2-3-4 consecutive days. State is keyed by ISO date so each day has
+  // its own slot selection, but the instructor is shared across all
+  // selected dates (one booking flow = one instructor across all days).
+  const [dates, setDates] = useState<string[]>([initialDate]);
+  const [selectedTimesByDate, setSelectedTimesByDate] = useState<
+    Record<string, string[]>
+  >({});
   const [instructorId, setInstructorId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -658,20 +669,29 @@ function ManualBookingModal({
   ]);
   const [saving, setSaving] = useState(false);
 
-  // Pull the day's calendar so we can show which instructors are free
-  // for the chosen slot set.
-  const { data: dayData, isLoading: loadingDay } = useQuery({
-    queryKey: ["school-calendar", date],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("school_day_calendar", {
-        p_date: date,
-      });
-      if (error) throw error;
-      return data as SchoolCalendarDay;
-    },
+  // One calendar query per selected date, fetched in parallel.
+  const calendarQueries = useQueries({
+    queries: dates.map((d) => ({
+      queryKey: ["school-calendar", d],
+      queryFn: async () => {
+        const { data, error } = await supabase.rpc("school_day_calendar", {
+          p_date: d,
+        });
+        if (error) throw error;
+        return data as SchoolCalendarDay;
+      },
+    })),
   });
+  const dayDataByDate = useMemo(() => {
+    const m: Record<string, SchoolCalendarDay | undefined> = {};
+    dates.forEach((d, i) => {
+      m[d] = calendarQueries[i]?.data;
+    });
+    return m;
+  }, [dates, calendarQueries]);
+  const loadingAny = calendarQueries.some((q) => q.isLoading);
 
-  // 7-day strip starting from today for date picking inside the modal.
+  // 14-day strip starting from today for date picking inside the modal.
   const dateOptions = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -682,26 +702,54 @@ function ManualBookingModal({
     });
   }, []);
 
-  // When date changes, clear the previous instructor + slot selection so
-  // the user re-picks against the new day's availability. This also
-  // enforces the "one booking = one instructor" rule cleanly.
-  useEffect(() => {
-    setInstructorId(null);
-    setSelectedTimes([]);
-  }, [date]);
-
-  function toggleSlot(t: string) {
-    setSelectedTimes((cur) =>
-      cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t].sort(),
-    );
+  function toggleDate(iso: string) {
+    setDates((cur) => {
+      if (cur.includes(iso)) {
+        // Removing a date also drops its slot selection.
+        setSelectedTimesByDate((stm) => {
+          const { [iso]: _, ...rest } = stm;
+          return rest;
+        });
+        const next = cur.filter((x) => x !== iso);
+        return next.length === 0 ? cur : next; // never empty
+      }
+      return [...cur, iso].sort();
+    });
   }
+
+  function pickSlot(insId: string, dateIso: string, slot: string) {
+    // If switching to a different instructor, clear ALL prior selections
+    // across every date and start fresh with this single slot.
+    if (instructorId && insId !== instructorId) {
+      setInstructorId(insId);
+      setSelectedTimesByDate({ [dateIso]: [slot] });
+      return;
+    }
+    if (!instructorId) setInstructorId(insId);
+    setSelectedTimesByDate((cur) => {
+      const cur1 = cur[dateIso] ?? [];
+      const next = cur1.includes(slot)
+        ? cur1.filter((x) => x !== slot)
+        : [...cur1, slot].sort();
+      const out = { ...cur, [dateIso]: next };
+      // If this date now has zero slots, prune the key for cleanliness.
+      if (next.length === 0) delete out[dateIso];
+      return out;
+    });
+  }
+
+  const totalSlotCount = useMemo(
+    () =>
+      Object.values(selectedTimesByDate).reduce((a, arr) => a + arr.length, 0),
+    [selectedTimesByDate],
+  );
 
   async function save() {
     if (!customerName.trim()) {
       Alert.alert("Eksik", "Müşteri adını gir.");
       return;
     }
-    if (selectedTimes.length === 0) {
+    if (totalSlotCount === 0) {
       Alert.alert("Eksik", "En az bir seans seç.");
       return;
     }
@@ -721,42 +769,63 @@ function ManualBookingModal({
       Alert.alert("Eksik", "En az bir öğrenci adı gir.");
       return;
     }
+
+    // Split price across the days proportionally to slot counts so each
+    // booking gets its share. Remainder goes to the first day.
+    const totalKurus = price ? Math.round(parseFloat(price) * 100) : 0;
+    const datesToBook = Object.keys(selectedTimesByDate).sort();
+    const perDateKurus: Record<string, number> = {};
+    if (totalKurus > 0 && totalSlotCount > 0) {
+      let assigned = 0;
+      datesToBook.forEach((d, idx) => {
+        if (idx === datesToBook.length - 1) {
+          perDateKurus[d] = totalKurus - assigned;
+        } else {
+          const share = Math.round(
+            (totalKurus * selectedTimesByDate[d].length) / totalSlotCount,
+          );
+          perDateKurus[d] = share;
+          assigned += share;
+        }
+      });
+    }
+
     setSaving(true);
     console.log("[manual-booking] save start", {
       instructorId,
-      date,
-      selectedTimes,
+      datesToBook,
+      selectedTimesByDate,
       studentPayload,
-      price,
+      totalKurus,
     });
     try {
-      const { data, error } = await supabase.rpc(
-        "school_create_manual_booking",
-        {
+      // Sequential so a partial failure stops cleanly with a clear error.
+      for (const d of datesToBook) {
+        const { error } = await supabase.rpc("school_create_manual_booking", {
           p_instructor: instructorId,
-          p_date: date,
-          p_slot_times: selectedTimes,
+          p_date: d,
+          p_slot_times: selectedTimesByDate[d],
           p_students: studentPayload,
           p_customer_name: customerName.trim(),
           p_customer_phone: customerPhone.trim() || null,
           p_notes: notes.trim() || null,
-          p_price_kurus: price ? Math.round(parseFloat(price) * 100) : 0,
-        },
-      );
-      console.log("[manual-booking] rpc returned", { data, error });
-      setSaving(false);
-      if (error) {
-        const msg = error.message || "Bilinmeyen hata";
-        if (
-          typeof window !== "undefined" &&
-          typeof window.alert === "function"
-        ) {
-          window.alert(`Hata: ${msg}`);
-        } else {
-          Alert.alert("Hata", msg);
+          p_price_kurus: perDateKurus[d] ?? 0,
+        });
+        if (error) {
+          setSaving(false);
+          const msg = `${d}: ${error.message || "Bilinmeyen hata"}`;
+          if (
+            typeof window !== "undefined" &&
+            typeof window.alert === "function"
+          ) {
+            window.alert(`Hata: ${msg}`);
+          } else {
+            Alert.alert("Hata", msg);
+          }
+          return;
         }
-        return;
       }
+      setSaving(false);
       onSaved();
     } catch (e) {
       console.error("[manual-booking] threw", e);
@@ -790,7 +859,9 @@ function ManualBookingModal({
             </Text>
 
             <View>
-              <Text style={modalStyles.sectionLabel}>Tarih</Text>
+              <Text style={modalStyles.sectionLabel}>
+                Tarih(ler) — birden fazla gün seçebilirsin
+              </Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -798,11 +869,11 @@ function ManualBookingModal({
               >
                 {dateOptions.map((d) => {
                   const iso = isoDate(d);
-                  const sel = iso === date;
+                  const sel = dates.includes(iso);
                   return (
                     <Pressable
                       key={iso}
-                      onPress={() => setDate(iso)}
+                      onPress={() => toggleDate(iso)}
                       style={{
                         paddingHorizontal: 10,
                         paddingVertical: 6,
@@ -843,35 +914,71 @@ function ManualBookingModal({
                   );
                 })}
               </ScrollView>
+              {dates.length > 1 ? (
+                <Text style={[modalStyles.helperText, { marginTop: 6 }]}>
+                  {dates.length} gün seçildi · toplam {totalSlotCount} seans
+                </Text>
+              ) : null}
             </View>
 
             <View>
               <Text style={modalStyles.sectionLabel}>
                 Eğitmen ve müsait saatler *
               </Text>
-              <Text
-                style={[modalStyles.helperText, { marginBottom: 8 }]}
-              >
-                Bir eğitmen seç, ardından o eğitmenin müsait saatlerinden
-                seçim yap. Tek rezervasyon = tek eğitmen.
+              <Text style={[modalStyles.helperText, { marginBottom: 8 }]}>
+                Her gün için aynı eğitmenden müsait saatleri seç. Başka bir
+                eğitmenin saatine basarsan tüm seçim sıfırlanır (tek
+                rezervasyon = tek eğitmen).
               </Text>
-              {loadingDay ? (
+              {loadingAny ? (
                 <Text style={modalStyles.helperText}>Yükleniyor…</Text>
-              ) : (dayData?.instructors ?? []).length === 0 ? (
-                <Text
-                  style={[modalStyles.helperText, { color: adminTheme.danger }]}
-                >
-                  Bu okula bağlı onaylı eğitmen yok.
-                </Text>
-              ) : (
-                <View style={{ gap: 8 }}>
-                  {(dayData?.instructors ?? []).map((ins) => {
-                    const isPicked = ins.instructor_id === instructorId;
-                    const freeSlots = ins.slots
-                      .filter((s) => s.status === "available")
-                      .map((s) => s.slot_time)
-                      .sort();
-                    const allBlocked = freeSlots.length === 0;
+              ) : null}
+
+              {dates.map((dIso, dIdx) => {
+                const dObj = new Date(`${dIso}T00:00:00`);
+                const dayData = dayDataByDate[dIso];
+                const insList = dayData?.instructors ?? [];
+                return (
+                  <View
+                    key={dIso}
+                    style={{
+                      marginTop: dIdx === 0 ? 0 : 14,
+                      gap: 8,
+                    }}
+                  >
+                    {dates.length > 1 ? (
+                      <Text
+                        style={{
+                          color: adminTheme.text,
+                          fontFamily: adminTheme.fontTitle,
+                          fontSize: 12,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.6,
+                        }}
+                      >
+                        {dayLong(dObj)}
+                      </Text>
+                    ) : null}
+
+                    {insList.length === 0 && !loadingAny ? (
+                      <Text
+                        style={[
+                          modalStyles.helperText,
+                          { color: adminTheme.danger },
+                        ]}
+                      >
+                        Bu güne ait eğitmen yok.
+                      </Text>
+                    ) : null}
+
+                    {insList.map((ins) => {
+                      const isPicked = ins.instructor_id === instructorId;
+                      const freeSlots = ins.slots
+                        .filter((s) => s.status === "available")
+                        .map((s) => s.slot_time)
+                        .sort();
+                      const allBlocked = freeSlots.length === 0;
+                      const dateIso = dIso;
                     return (
                       <View
                         key={ins.instructor_id}
@@ -940,23 +1047,16 @@ function ManualBookingModal({
                           >
                             {freeSlots.map((t) => {
                               const sel =
-                                isPicked && selectedTimes.includes(t);
+                                isPicked &&
+                                (selectedTimesByDate[dateIso] ?? []).includes(
+                                  t,
+                                );
                               return (
                                 <Pressable
                                   key={t}
-                                  onPress={() => {
-                                    // Tapping any slot of another instructor
-                                    // switches the booking to that
-                                    // instructor and starts a fresh slot
-                                    // selection (one booking = one
-                                    // instructor).
-                                    if (ins.instructor_id !== instructorId) {
-                                      setInstructorId(ins.instructor_id);
-                                      setSelectedTimes([t]);
-                                    } else {
-                                      toggleSlot(t);
-                                    }
-                                  }}
+                                  onPress={() =>
+                                    pickSlot(ins.instructor_id, dateIso, t)
+                                  }
                                   style={{
                                     paddingHorizontal: 10,
                                     paddingVertical: 6,
@@ -987,8 +1087,9 @@ function ManualBookingModal({
                       </View>
                     );
                   })}
-                </View>
-              )}
+                  </View>
+                );
+              })}
             </View>
 
             <AdminInput
