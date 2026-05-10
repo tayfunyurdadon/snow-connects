@@ -299,6 +299,16 @@ Each migration is in `supabase/migrations/` and is idempotent. Apply via SQL edi
   left for a Phase 18b — the table + RPC are in place so the client can opt
   in without further DB work.
 
+- **Phase 18b — Request-to-Book 24h guardrail hotfix
+  (`2026_05_phase18b_request_book_fixes.sql`).** Phase 18 only checked
+  `p_date < current_date + 1`, which let through any lesson scheduled for
+  tomorrow even when the earliest slot started in just a few hours — making
+  both the 12h SLA and the 24h auto-cancel guardrail useless. Replaces
+  `request_booking` in-place to compare against the actual earliest slot
+  timestamp: `(p_date + min(slot_time))::timestamptz < now() + 24h` →
+  `lesson_too_soon`. Same translation already exists in
+  `book/[instructorId].tsx:translateError`.
+
 - **Phase 15 — Effective school pricing
   (`2026_05_phase15_school_pricing_effective.sql`).** Phase 10 added per-school tier
   prices but `create_booking` and the customer screens never read them, so school-
