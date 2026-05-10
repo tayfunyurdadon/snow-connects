@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CardCaptureModal } from "@/components/ui/CardCaptureModal";
 import { Input } from "@/components/ui/Input";
 import { Loading } from "@/components/ui/Loading";
 import { Pill } from "@/components/ui/Pill";
@@ -106,7 +107,11 @@ export default function BookScreen() {
   const [studentCount, setStudentCount] = useState<number>(1);
   const [students, setStudents] = useState<StudentInput[]>([blankStudent()]);
   const [submitting, setSubmitting] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  // Synchronous in-flight lock — prevents duplicate request_booking RPCs
+  // from rapid double-taps before React re-renders `submitting`.
+  const inFlightRef = useRef(false);
 
   const draftKey = `pending_booking_${instructorId}`;
 
@@ -344,6 +349,8 @@ export default function BookScreen() {
     return m;
   }
 
+  // Validate + auth gate, then open the card-capture modal. The actual
+  // RPC fires from `sendRequest(token)` after the customer submits a card.
   async function submit() {
     if (submitting) return;
     const err = validate();
@@ -382,7 +389,18 @@ export default function BookScreen() {
       return;
     }
 
+    // Open card-capture modal — actual booking RPC fires from sendRequest()
+    // after the customer enters card details.
+    setCardModalOpen(true);
+  }
+
+  // Returns true on success (modal closes + resets), false to keep modal
+  // open with card fields preserved for one-tap retry.
+  async function sendRequest(paymentToken: string): Promise<boolean> {
+    if (inFlightRef.current) return false;
+    inFlightRef.current = true;
     setSubmitting(true);
+    try {
     const grouped = [...groupByDate(selectedKeys).entries()].sort(
       ([a], [b]) => a.localeCompare(b),
     );
@@ -396,14 +414,14 @@ export default function BookScreen() {
         p_date: d,
         p_slot_times: slots,
         p_students: students,
-        p_payment_method_token: null,
+        p_payment_method_token: paymentToken,
       });
       if (error) {
         setSubmitting(false);
         const friendly = translateError(error.message);
         if (createdIds.length === 0) {
           showAlert("Rezervasyon başarısız", friendly);
-          return;
+          return false;
         }
         // Partial success — don't trap state; clear what was committed
         // and route to the bookings list so the user can pay/manage.
@@ -418,7 +436,7 @@ export default function BookScreen() {
             },
           ],
         );
-        return;
+        return true;
       }
       const r = data as {
         booking_id: string;
@@ -435,12 +453,12 @@ export default function BookScreen() {
     await clearDraft();
 
     if (isRequest) {
-      // Phase 18: request sent, no charge yet. Customer waits on instructor.
+      // Phase 18: request sent, card on hold but not yet captured.
       showAlert(
         "🎿 Talebin gönderildi",
         createdIds.length === 1
-          ? "Eğitmenin 12 saat içinde onaylaması bekleniyor. Onaylandığında bildirim alacaksın."
-          : `${createdIds.length} talep gönderildi. Eğitmenin onayı bekleniyor.`,
+          ? `Eğitmenin 12 saat içinde onaylaması bekleniyor. Onaylandığında ${formatTRY(totals.total)} kartından otomatik tahsil edilecek; reddedilirse hiçbir ücret alınmayacak.`
+          : `${createdIds.length} talep gönderildi. Eğitmenin onayı bekleniyor — onaylanan her ders için otomatik tahsil yapılacak.`,
         [
           {
             text: "Rezervasyonlarım",
@@ -453,8 +471,8 @@ export default function BookScreen() {
       showAlert(
         "🎿 Rezervasyonun onaylandı!",
         createdIds.length === 1
-          ? "Anında onay aktif olduğu için rezervasyonun hemen onaylandı."
-          : `${createdIds.length} ders oluşturuldu ve onaylandı.`,
+          ? `Anında onay aktif olduğu için rezervasyonun hemen onaylandı ve ${formatTRY(totals.total)} tahsil edildi.`
+          : `${createdIds.length} ders oluşturuldu, onaylandı ve tahsil edildi.`,
         [
           {
             text: "Rezervasyonlarım",
@@ -465,6 +483,11 @@ export default function BookScreen() {
     } else {
       // Legacy fallback: pending payment.
       router.replace(`/(app)/payment/${createdIds[0]}`);
+    }
+    return true;
+    } finally {
+      setSubmitting(false);
+      inFlightRef.current = false;
     }
   }
 
@@ -772,6 +795,20 @@ export default function BookScreen() {
           </Text>
         </View>
       )}
+
+      <CardCaptureModal
+        open={cardModalOpen}
+        totalKurus={totals.total}
+        loading={submitting}
+        onClose={() => {
+          if (!submitting) setCardModalOpen(false);
+        }}
+        onConfirm={async ({ token }) => {
+          const ok = await sendRequest(token);
+          if (ok) setCardModalOpen(false);
+          return ok;
+        }}
+      />
     </Screen>
   );
 }
