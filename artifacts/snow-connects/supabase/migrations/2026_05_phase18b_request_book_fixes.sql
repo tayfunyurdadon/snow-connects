@@ -1,82 +1,84 @@
 -- ============================================================
--- Phase 18b — Request-to-Book hotfix
+-- Phase 18b — Request-to-Book 24h guardrail hotfix
 --
 -- Phase 18's `request_booking` only checked `p_date < current_date + 1`,
 -- which let through any lesson scheduled for tomorrow even when the
--- earliest slot started in just a few hours. The 24h SLA + 24h hard
--- guardrail are useless if a request can be created with < 24h until
--- the actual slot. This patch tightens the check to use the earliest
--- requested slot's wall-clock start time.
+-- earliest slot started in just a few hours from now. The 12h SLA and
+-- 24h auto-cancel guardrail are useless if a request can be created with
+-- < 24h until the actual slot. This migration replaces `request_booking`
+-- in place. The ONLY change vs. Phase 18 is the guardrail block: it now
+-- compares (lesson_date + earliest slot_time) against now() + 24h.
 -- ============================================================
 
 create or replace function request_booking(
   p_instructor uuid,
-  p_resort     uuid,
-  p_date       date,
+  p_resort uuid,
+  p_date date,
   p_slot_times text[],
-  p_students   json,
+  p_students json,
   p_payment_method_token text default null
 ) returns json language plpgsql security definer set search_path = public as $$
 declare
-  v_customer        uuid := auth.uid();
-  v_status          text;
-  v_test_mode       boolean;
-  v_vat_rate        numeric;
-  v_bank_rate       numeric;
-  v_fee             integer;
-  v_season_start_month int; v_season_start_day int;
-  v_season_end_month   int; v_season_end_day   int;
-  v_season_start    date;
-  v_season_end      date;
-  v_school_id       uuid;
-  v_instant         boolean;
-  v_school_price    integer;
-  v_base            integer;
-  v_slot_count      integer := array_length(p_slot_times, 1);
-  v_student_count   integer := json_array_length(p_students);
-  v_base_total      integer;
-  v_vat             integer;
-  v_lesson          integer;
-  v_bank            integer;
-  v_total           integer;
-  v_platform        integer;
-  v_slot_ids        uuid[];
-  v_slot_id         uuid;
-  v_existing        time_slots%rowtype;
-  v_booking_id      uuid;
-  v_student         json;
-  v_release         date;
-  v_recipient_type  text;
-  v_recipient_id    uuid;
-  v_payment_status  text;
+  v_customer uuid := auth.uid();
+  v_base integer;
+  v_base_total integer;
+  v_vat_rate numeric;
+  v_bank_rate numeric;
+  v_fee integer;
+  v_test_mode boolean;
+  v_vat integer;
+  v_lesson integer;
+  v_bank integer;
+  v_total integer;
+  v_platform integer;
+  v_slot_ids uuid[];
+  v_booking_id uuid;
+  v_student json;
+  v_slot_count integer := array_length(p_slot_times, 1);
+  v_student_count integer := json_array_length(p_students);
+  v_year integer;
+  v_season_start date;
+  v_season_end date;
+  v_season_start_month smallint;
+  v_season_start_day smallint;
+  v_season_end_month smallint;
+  v_season_end_day smallint;
+  v_status text;
+  v_existing time_slots%rowtype;
+  v_slot_id uuid;
+  v_payment_status text;
   v_approval_status text;
   v_approval_deadline timestamptz;
-  v_earliest_ts     timestamptz;
+  v_release date;
+  v_instant boolean;
+  v_school_id uuid;
+  v_school_price integer;
+  v_recipient_type text;
+  v_recipient_id uuid;
+  v_d date;
+  v_added int;
+  v_earliest_ts timestamptz;
+  i integer;
 begin
   if v_customer is null then raise exception 'not authenticated'; end if;
-
-  -- Customer must be active.
   select status into v_status from users where id = v_customer;
-  if v_status is distinct from 'active' then raise exception 'blocked'; end if;
+  if v_status = 'blocked' then raise exception 'account blocked'; end if;
+  if v_slot_count is null or v_slot_count < 1 then raise exception 'no slots'; end if;
+  if v_student_count is null or v_student_count < 1 then raise exception 'no students'; end if;
 
-  -- Config
-  select coalesce((select value::boolean from app_config where key = 'test_mode'), false)
-    into v_test_mode;
-  select coalesce((select value::numeric from app_config where key = 'vat_rate'), 0.20),
-         coalesce((select value::numeric from app_config where key = 'bank_commission_rate'), 0.04),
-         coalesce((select value::int     from app_config where key = 'transaction_fee_kurus'), 10000)
-    into v_vat_rate, v_bank_rate, v_fee;
+  perform release_expired_pending_bookings();
 
-  -- Season window
-  select coalesce((select value::int from app_config where key = 'season_start_month'), 12),
-         coalesce((select value::int from app_config where key = 'season_start_day'),   15),
-         coalesce((select value::int from app_config where key = 'season_end_month'),    4),
-         coalesce((select value::int from app_config where key = 'season_end_day'),     15)
-    into v_season_start_month, v_season_start_day, v_season_end_month, v_season_end_day;
+  select vat_rate, bank_commission_rate, transaction_fee_kurus, test_mode,
+         season_start_month, season_start_day,
+         season_end_month,   season_end_day
+    into v_vat_rate, v_bank_rate, v_fee, v_test_mode,
+         v_season_start_month, v_season_start_day,
+         v_season_end_month,   v_season_end_day
+    from app_config where id = 1;
+
+  v_year := extract(year from p_date)::int;
   v_season_start := make_date(
-    case when extract(month from current_date)::int < v_season_start_month
-         then extract(year from current_date)::int - 1
-         else extract(year from current_date)::int end,
+    case when extract(month from p_date)::int >= v_season_start_month then v_year else v_year - 1 end,
     v_season_start_month, v_season_start_day
   );
   v_season_end := make_date(
@@ -87,15 +89,10 @@ begin
     raise exception 'season closed';
   end if;
 
-  if v_slot_count is null or v_slot_count < 1 then raise exception 'no slots'; end if;
-  if v_student_count is null or v_student_count < 1 then raise exception 'no students'; end if;
-
-  -- Hard guardrail: earliest requested slot must start at least 24 hours
-  -- from now. Phase 18a only compared dates and so let through bookings
-  -- for tomorrow morning. Compare on the actual slot timestamp.
+  -- Hard guardrail: earliest requested slot must start at least 24h from now.
+  -- (Phase 18 only compared dates, which let tomorrow-morning lessons through.)
   v_earliest_ts := (
-    p_date::timestamp
-    + (select min(t::time) from unnest(p_slot_times) t)
+    p_date::timestamp + (select min(t::time) from unnest(p_slot_times) t)
   ) at time zone 'UTC';
   if v_earliest_ts < (now() + interval '24 hours') then
     raise exception 'lesson_too_soon';
@@ -178,7 +175,7 @@ begin
     transaction_fee, bank_commission,
     approval_status, requested_at, approval_deadline, approved_at,
     payment_method_token,
-    payment_deadline   -- IMPORTANT: NULL for request flow so the 15-min sweeper ignores it
+    payment_deadline
   ) values (
     v_customer, p_instructor, p_resort, v_slot_ids, v_student_count,
     v_base_total, v_vat, v_platform, v_total, p_date,
@@ -202,7 +199,6 @@ begin
               v_student->>'experienceLevel');
   end loop;
 
-  -- If instant/test-mode: insert payout immediately (mirrors create_booking)
   if v_approval_status = 'approved' then
     v_release := _add_business_days(p_date, 21);
     if v_school_id is not null then
@@ -234,6 +230,4 @@ begin
   );
 end;
 $$;
-
-grant execute on function request_booking(uuid, uuid, date, text[], json, text)
-  to authenticated;
+grant execute on function request_booking(uuid, uuid, date, text[], json, text) to authenticated;
