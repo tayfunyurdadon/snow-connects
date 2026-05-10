@@ -2,11 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Platform, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CardCaptureModal } from "@/components/ui/CardCaptureModal";
 import { Header } from "@/components/ui/Header";
 import { Pill } from "@/components/ui/Pill";
 import { Screen } from "@/components/ui/Screen";
@@ -14,17 +15,77 @@ import { SignInGate } from "@/components/ui/SignInGate";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { confirmAlert, showAlert } from "@/lib/uiAlert";
+import { supabase } from "@/lib/supabase";
 
 export default function ProfileTab() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshUser } = useAuth();
   const toast = useToast();
   // Guard against double-taps on the destructive confirm. Without this
   // a user who taps "Çıkış Yap" twice in the dialog would fire two
   // signOut calls and two AsyncStorage wipes in quick succession.
   const [signingOut, setSigningOut] = useState(false);
+  // Saved-card modal + remove-in-flight state.
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [savingCard, setSavingCard] = useState(false);
+  const [removingCard, setRemovingCard] = useState(false);
+
+  async function handleSaveCard({
+    token,
+    last4,
+    holder,
+  }: {
+    token: string;
+    last4: string;
+    holder: string;
+  }): Promise<boolean> {
+    if (savingCard) return false;
+    setSavingCard(true);
+    try {
+      const { error } = await supabase.rpc("customer_save_card", {
+        p_token: token,
+        p_last4: last4,
+        p_holder: holder,
+        p_brand: null,
+      });
+      if (error) {
+        showAlert("Kart kaydedilemedi", error.message);
+        return false;
+      }
+      await refreshUser();
+      toast.show("Kartın kaydedildi", "success");
+      return true;
+    } finally {
+      setSavingCard(false);
+    }
+  }
+
+  function handleRemoveCard() {
+    if (removingCard) return;
+    confirmAlert(
+      "Kayıtlı kartı sil",
+      "Bir sonraki rezervasyonda kart bilgilerini tekrar girmen gerekecek. Devam edeyim mi?",
+      "Sil",
+      async () => {
+        setRemovingCard(true);
+        try {
+          const { error } = await supabase.rpc("customer_remove_card");
+          if (error) {
+            showAlert("Silinemedi", error.message);
+            return;
+          }
+          await refreshUser();
+          toast.show("Kart silindi", "success");
+        } finally {
+          setRemovingCard(false);
+        }
+      },
+      { destructive: true },
+    );
+  }
 
   // Performs the actual sign-out work after the user confirmed. Kept as a
   // local helper so both the web (window.confirm) and native (Alert.alert)
@@ -192,6 +253,16 @@ export default function ProfileTab() {
         </View>
       </Card>
 
+      {user?.role === "customer" ? (
+        <SavedCardCard
+          last4={user.saved_card_last4}
+          holder={user.saved_card_holder}
+          onAdd={() => setCardModalOpen(true)}
+          onRemove={handleRemoveCard}
+          removing={removingCard}
+        />
+      ) : null}
+
       <View style={{ gap: 8 }}>
         {user?.role === "instructor" ? (
           <>
@@ -235,7 +306,154 @@ export default function ProfileTab() {
           onPress={handleSignOut}
         />
       </View>
+
+      <CardCaptureModal
+        open={cardModalOpen}
+        totalKurus={0}
+        mode="save"
+        loading={savingCard}
+        onClose={() => {
+          if (!savingCard) setCardModalOpen(false);
+        }}
+        onConfirm={async (r) => {
+          const ok = await handleSaveCard(r);
+          if (ok) setCardModalOpen(false);
+          return ok;
+        }}
+      />
     </Screen>
+  );
+}
+
+function SavedCardCard({
+  last4,
+  holder,
+  onAdd,
+  onRemove,
+  removing,
+}: {
+  last4: string | null;
+  holder: string | null;
+  onAdd: () => void;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const c = useColors();
+  if (!last4) {
+    return (
+      <Card padding={16}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="credit-card" size={18} color={c.accentDeep} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 15,
+              }}
+            >
+              Ödeme Yöntemi
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 12,
+                lineHeight: 17,
+              }}
+            >
+              Bir kart kaydet, her rezervasyonda tekrar yazma.
+            </Text>
+          </View>
+          <Pressable onPress={onAdd} hitSlop={6}>
+            <Text
+              style={{
+                color: c.accentDeep,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+                textDecorationLine: "underline",
+              }}
+            >
+              Kart Ekle
+            </Text>
+          </Pressable>
+        </View>
+      </Card>
+    );
+  }
+
+  return (
+    <Card padding={16}>
+      <View style={{ gap: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              backgroundColor: c.accentSoft,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="credit-card" size={18} color={c.accentDeep} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 15,
+              }}
+            >
+              •••• {last4}
+            </Text>
+            {holder ? (
+              <Text
+                style={{
+                  color: c.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 12,
+                }}
+              >
+                {holder}
+              </Text>
+            ) : null}
+          </View>
+          <Pill label="Kayıtlı" tone="success" size="sm" />
+        </View>
+        <Text
+          style={{
+            color: c.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 11,
+            lineHeight: 16,
+          }}
+        >
+          Yeni rezervasyonlarda kart bilgisi sorulmaz; eğitmen onayladıktan
+          sonra otomatik tahsil edilir.
+        </Text>
+        <View style={{ alignSelf: "flex-start" }}>
+          <Button
+            label="Kartı Sil"
+            variant="ghost"
+            onPress={onRemove}
+            loading={removing}
+          />
+        </View>
+      </View>
+    </Card>
   );
 }
 

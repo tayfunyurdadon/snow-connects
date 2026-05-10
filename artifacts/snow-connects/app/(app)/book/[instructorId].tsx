@@ -91,7 +91,19 @@ export default function BookScreen() {
     to?: string;
     resort?: string;
   }>();
-  const { session, loading: authLoading } = useAuth();
+  const { session, user, loading: authLoading } = useAuth();
+  // When the customer set "use one-time card" via the "Değiştir" link,
+  // we suppress the saved-card fast-path for this booking only.
+  const [useOneTimeCard, setUseOneTimeCard] = useState(false);
+  const savedCard =
+    user?.saved_card_token && user?.saved_card_last4
+      ? {
+          token: user.saved_card_token,
+          last4: user.saved_card_last4,
+          holder: user.saved_card_holder ?? "",
+        }
+      : null;
+  const willUseSavedCard = !!savedCard && !useOneTimeCard;
 
   // Date range is required to enter this screen. If we landed here without
   // it (deep link, stale draft), bounce back to the picker so the user
@@ -386,6 +398,15 @@ export default function BookScreen() {
       await persistDraft();
       const next = encodeURIComponent(nextPath);
       router.push(`/(auth)/login?next=${next}` as never);
+      return;
+    }
+
+    // Saved-card fast path: skip the card-capture modal entirely and
+    // submit the request straight away with the vaulted token. The
+    // customer can still tap "Değiştir" before this point to use a
+    // one-time card.
+    if (willUseSavedCard && savedCard) {
+      void sendRequest(savedCard.token);
       return;
     }
 
@@ -757,13 +778,68 @@ export default function BookScreen() {
 
           <SupportBanner />
 
+          {willUseSavedCard && savedCard && session ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: c.accentSoft,
+              }}
+            >
+              <Feather name="credit-card" size={18} color={c.accentDeep} />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    color: c.accentDeep,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  Kayıtlı kart kullanılacak · •••• {savedCard.last4}
+                </Text>
+                <Text
+                  style={{
+                    color: c.accentDeep,
+                    fontFamily: "Inter_400Regular",
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Eğitmen onayladıktan sonra otomatik tahsil.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setUseOneTimeCard(true);
+                  setCardModalOpen(true);
+                }}
+                hitSlop={8}
+              >
+                <Text
+                  style={{
+                    color: c.accentDeep,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  Değiştir
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <Button
             variant="accent"
             size="lg"
             label={
               !session
                 ? `Onayla ve giriş yap · ${formatTRY(totals.total)}`
-                : `Onayla · ${formatTRY(totals.total)}`
+                : willUseSavedCard
+                  ? `Talebi Gönder · ${formatTRY(totals.total)}`
+                  : `Onayla · ${formatTRY(totals.total)}`
             }
             onPress={submit}
             loading={submitting}
@@ -801,11 +877,19 @@ export default function BookScreen() {
         totalKurus={totals.total}
         loading={submitting}
         onClose={() => {
-          if (!submitting) setCardModalOpen(false);
+          if (!submitting) {
+            setCardModalOpen(false);
+            // Reset the one-time override so the saved card resumes
+            // being the default for the next attempt.
+            setUseOneTimeCard(false);
+          }
         }}
         onConfirm={async ({ token }) => {
           const ok = await sendRequest(token);
-          if (ok) setCardModalOpen(false);
+          if (ok) {
+            setCardModalOpen(false);
+            setUseOneTimeCard(false);
+          }
           return ok;
         }}
       />

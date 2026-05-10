@@ -17,12 +17,23 @@ import { formatTRY } from "@/lib/format";
 
 type Props = {
   open: boolean;
+  // Total in kuruş — only used in `payment` mode for the price chip
+  // and CTA label. Pass 0 in `save` mode (it's hidden).
   totalKurus: number;
   onClose: () => void;
   // Returns true on success (modal will reset + close); false keeps the
   // modal open with card fields preserved so the customer can retry.
-  onConfirm: (result: { token: string; last4: string }) => Promise<boolean>;
+  onConfirm: (result: {
+    token: string;
+    last4: string;
+    holder: string;
+  }) => Promise<boolean>;
   loading?: boolean;
+  // `payment` (default): "Talebi Gönder · ₺X" + "Onaylanırsa tahsil
+  // edilecek" chip + "kartından bir şey çekilmez" copy.
+  // `save`: profile-side card vaulting — no amount, neutral copy,
+  // CTA "Kartı Kaydet".
+  mode?: "payment" | "save";
 };
 
 function formatCardNumber(raw: string): string {
@@ -53,6 +64,7 @@ export function CardCaptureModal({
   onClose,
   onConfirm,
   loading,
+  mode = "payment",
 }: Props) {
   const c = useColors();
   const [name, setName] = useState("");
@@ -99,7 +111,7 @@ export function CardCaptureModal({
     try {
       const last4 = digits.slice(-4);
       const token = `stub_${last4}_${Date.now()}`;
-      const ok = await onConfirm({ token, last4 });
+      const ok = await onConfirm({ token, last4, holder: name.trim() });
       if (ok) reset();
       // On failure: keep card fields populated for a one-tap retry.
     } finally {
@@ -148,7 +160,7 @@ export function CardCaptureModal({
                     letterSpacing: -0.3,
                   }}
                 >
-                  Kart bilgilerin
+                  {mode === "save" ? "Kart kaydet" : "Kart bilgilerin"}
                 </Text>
                 <Text
                   style={{
@@ -158,42 +170,46 @@ export function CardCaptureModal({
                     marginTop: 2,
                   }}
                 >
-                  Eğitmen onaylayana kadar kartından bir şey çekilmez.
+                  {mode === "save"
+                    ? "Bir kez gir, sonraki rezervasyonlarda otomatik kullanılsın."
+                    : "Eğitmen onaylayana kadar kartından bir şey çekilmez."}
                 </Text>
               </View>
               <Pill label="Test" tone="warning" size="sm" />
             </View>
 
-            <View
-              style={{
-                backgroundColor: c.accentSoft,
-                borderRadius: 14,
-                padding: 14,
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text
+            {mode === "payment" ? (
+              <View
                 style={{
-                  color: c.accentDeep,
-                  fontFamily: "Inter_600SemiBold",
-                  fontSize: 13,
+                  backgroundColor: c.accentSoft,
+                  borderRadius: 14,
+                  padding: 14,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
-                Onaylanırsa tahsil edilecek
-              </Text>
-              <Text
-                style={{
-                  color: c.accentDeep,
-                  fontFamily: "Fraunces_700Bold",
-                  fontSize: 22,
-                  letterSpacing: -0.4,
-                }}
-              >
-                {formatTRY(totalKurus)}
-              </Text>
-            </View>
+                <Text
+                  style={{
+                    color: c.accentDeep,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 13,
+                  }}
+                >
+                  Onaylanırsa tahsil edilecek
+                </Text>
+                <Text
+                  style={{
+                    color: c.accentDeep,
+                    fontFamily: "Fraunces_700Bold",
+                    fontSize: 22,
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  {formatTRY(totalKurus)}
+                </Text>
+              </View>
+            ) : null}
 
             <Input
               label="Kart üzerindeki isim"
@@ -266,17 +282,20 @@ export function CardCaptureModal({
                   lineHeight: 16,
                 }}
               >
-                Demo ortamı: gerçek kart bilgisi saklanmıyor. Yalnızca son 4
-                hane referans için tutuluyor. Eğitmen 12 saat içinde
-                onaylayınca tutar otomatik tahsil edilir; reddedilirse hiçbir
-                ücret alınmaz.
+                {mode === "save"
+                  ? "Demo ortamı: gerçek kart bilgisi saklanmıyor. Yalnızca son 4 hane ve isim profilinde gösterilmek üzere tutulur. İstediğin zaman silebilirsin."
+                  : "Demo ortamı: gerçek kart bilgisi saklanmıyor. Yalnızca son 4 hane referans için tutuluyor. Eğitmen 12 saat içinde onaylayınca tutar otomatik tahsil edilir; reddedilirse hiçbir ücret alınmaz."}
               </Text>
             </View>
 
             <Button
               variant="accent"
               size="lg"
-              label={`Talebi Gönder · ${formatTRY(totalKurus)}`}
+              label={
+                mode === "save"
+                  ? "Kartı Kaydet"
+                  : `Talebi Gönder · ${formatTRY(totalKurus)}`
+              }
               onPress={handleConfirm}
               loading={loading}
               disabled={loading}

@@ -151,18 +151,50 @@ export default function BookingsTab() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    // Customers only see paid bookings in the main list — pending ones
-    // are surfaced separately in the "Bekleyen Ödemeler" section above.
-    // Instructors see every booking that targets them regardless of
-    // payment state, since payment is the customer's responsibility.
-    const paymentOk = (b: Booking) =>
-      user?.role === "instructor" ? true : b.payment_status === "paid";
+    // What shows in the main list:
+    // - Instructors: every booking that targets them (payment is the
+    //   customer's problem).
+    // - Customers:
+    //     * paid bookings (legacy + post-approval flow), OR
+    //     * Phase 18 request-to-book rows that are still alive — i.e.
+    //       waiting for / extended past the instructor's 12h SLA, or
+    //       just-approved-pending-capture. These previously got hidden
+    //       behind the "payment_status === paid" gate so customers saw
+    //       an empty Dersler tab right after sending a request.
+    //   The legacy 15-min "Bekleyen Ödemeler" rows (with
+    //   payment_deadline) keep their dedicated section above.
+    // Terminal-but-historical states the customer should still see in
+    // the Past tab even though there's no payment.
+    const isTerminalPast = (b: Booking) =>
+      b.approval_status === "rejected" ||
+      b.approval_status === "expired" ||
+      b.approval_status === "customer_cancelled";
+
+    const visible = (b: Booking, currentTab: typeof tab) => {
+      if (user?.role === "instructor") return true;
+      if (b.payment_status === "paid") return true;
+      if (
+        b.approval_status === "pending" ||
+        b.approval_status === "awaiting_response" ||
+        b.approval_status === "approved"
+      ) {
+        // Hide legacy pending-payment rows (they have a 15-min deadline)
+        // since they get their own "Bekleyen Ödemeler" section above.
+        return !b.payment_deadline;
+      }
+      // Past tab also surfaces rejected / expired / customer-cancelled
+      // requests so the customer has a record of them.
+      if (currentTab === "past" && isTerminalPast(b)) return true;
+      return false;
+    };
     return data.filter(
       (b) =>
-        paymentOk(b) &&
+        visible(b, tab) &&
         (tab === "upcoming"
           ? b.lesson_date >= todayIso && b.lesson_status !== "cancelled"
-          : b.lesson_date < todayIso || b.lesson_status === "completed"),
+          : b.lesson_date < todayIso ||
+            b.lesson_status === "completed" ||
+            isTerminalPast(b)),
     );
   }, [data, tab, todayIso, user?.role]);
 
@@ -405,7 +437,7 @@ export default function BookingsTab() {
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 6 }}>
                     {b.is_test_booking ? <TestBadge /> : null}
-                    <PaymentPill status={b.payment_status} />
+                    <StatusPill booking={b} />
                   </View>
                 </View>
 
@@ -632,8 +664,29 @@ function PendingPaymentCard({
   );
 }
 
-function PaymentPill({ status }: { status: Booking["payment_status"] }) {
-  switch (status) {
+function StatusPill({ booking }: { booking: Booking }) {
+  // Phase 18 request-to-book states take precedence over payment_status —
+  // a request that's still pending instructor approval is more
+  // informative to the customer than "Ödeme bekliyor".
+  switch (booking.approval_status) {
+    case "pending":
+      return <Pill label="Eğitmen onayı bekliyor" tone="warning" size="sm" />;
+    case "awaiting_response":
+      return <Pill label="Senin yanıtın bekleniyor" tone="warning" size="sm" />;
+    case "rejected":
+      return <Pill label="Reddedildi" tone="danger" size="sm" />;
+    case "expired":
+      return <Pill label="Süresi doldu" tone="danger" size="sm" />;
+    case "customer_cancelled":
+      return <Pill label="Geri çekildi" size="sm" />;
+    case "approved":
+      // approved + paid → fall through to payment pill below.
+      if (booking.payment_status !== "paid") {
+        return <Pill label="Onaylandı · tahsil ediliyor" tone="accent" size="sm" />;
+      }
+      break;
+  }
+  switch (booking.payment_status) {
     case "paid":
       return <Pill label="Ödendi" tone="success" size="sm" />;
     case "pending":

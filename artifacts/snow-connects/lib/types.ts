@@ -88,6 +88,14 @@ export interface AppUser {
   status: UserStatus;
   strike_count: number;
   created_at: string;
+  // Phase 19 — optional saved payment method. Stub token only; real
+  // gateway vaulting (Param.com) lands in Phase 20. When all four are
+  // populated, the booking flow skips the card-capture modal.
+  saved_card_token: string | null;
+  saved_card_last4: string | null;
+  saved_card_holder: string | null;
+  saved_card_brand: string | null;
+  saved_card_added_at: string | null;
 }
 
 export interface Resort {
