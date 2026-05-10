@@ -5,6 +5,10 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Alert } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Header } from "@/components/ui/Header";
@@ -18,6 +22,17 @@ import { formatDateTR } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { slotLabel, TIME_SLOTS } from "@/lib/timeSlots";
 import { EXPERIENCE_LEVELS, type Resort } from "@/lib/types";
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "az önce";
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min} dk önce`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} saat önce`;
+  const d = Math.floor(h / 24);
+  return `${d} gün önce`;
+}
 
 function levelLabel(value: string): string {
   const fromList = EXPERIENCE_LEVELS.find((e) => e.value === value)?.label;
@@ -460,6 +475,110 @@ function InstructorHome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const qc = useQueryClient();
+
+  // Phase 18 — pending booking requests awaiting this instructor's response.
+  const { data: pendingRequests } = useQuery({
+    queryKey: ["instructor-pending-requests", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(
+          `id, lesson_date, total_price, student_count, slot_ids, requested_at,
+           approval_deadline, approval_status, extension_count,
+           customer:users!customer_id(name),
+           students(first_name, last_name, age, experience_level),
+           resort:resorts(name)`,
+        )
+        .eq("instructor_id", user!.id)
+        .in("approval_status", ["pending", "awaiting_response"])
+        .order("requested_at", { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      type Row = {
+        id: string;
+        lesson_date: string;
+        total_price: number;
+        student_count: number;
+        slot_ids: string[];
+        requested_at: string | null;
+        approval_deadline: string | null;
+        approval_status: "pending" | "awaiting_response";
+        extension_count: number;
+        customer: { name: string | null }[] | { name: string | null } | null;
+        students:
+          | {
+              first_name: string;
+              last_name: string;
+              age: number;
+              experience_level: string;
+            }[]
+          | null;
+        resort: { name: string }[] | { name: string } | null;
+      };
+      const list = ((data ?? []) as unknown[]).map((r) => {
+        const row = r as Row;
+        const cust = Array.isArray(row.customer)
+          ? row.customer[0] ?? null
+          : row.customer;
+        const res = Array.isArray(row.resort)
+          ? row.resort[0] ?? null
+          : row.resort;
+        return { ...row, customer: cust, resort: res };
+      });
+      return list;
+    },
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+
+  async function respond(
+    bookingId: string,
+    action: "accept" | "reject",
+  ) {
+    if (action === "reject") {
+      Alert.alert(
+        "Talebi reddet",
+        "Bu talebi reddetmek istediğine emin misin?",
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: "Reddet",
+            style: "destructive",
+            onPress: () => doReject(bookingId),
+          },
+        ],
+      );
+      return;
+    }
+    const { error } = await supabase.rpc("instructor_accept_request", {
+      p_booking: bookingId,
+    });
+    if (error) {
+      Alert.alert("Onaylanamadı", error.message);
+      return;
+    }
+    qc.invalidateQueries({
+      queryKey: ["instructor-pending-requests", user?.id],
+    });
+    qc.invalidateQueries({ queryKey: ["instructor-upcoming", user?.id] });
+    Alert.alert("Talep onaylandı", "Müşteriye bildirim gönderildi.");
+  }
+
+  async function doReject(bookingId: string) {
+    const { error } = await supabase.rpc("instructor_reject_request", {
+      p_booking: bookingId,
+      p_reason: null,
+    });
+    if (error) {
+      Alert.alert("Reddedilemedi", error.message);
+      return;
+    }
+    qc.invalidateQueries({
+      queryKey: ["instructor-pending-requests", user?.id],
+    });
+    Alert.alert("Talep reddedildi", "Saatlerin tekrar müsait.");
+  }
 
   const { data: bookings } = useQuery({
     queryKey: ["instructor-upcoming", user?.id],
@@ -622,6 +741,115 @@ function InstructorHome() {
           </Text>
         </Card>
       </View>
+
+      {pendingRequests && pendingRequests.length > 0 ? (
+        <View style={{ gap: 10 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+              Bekleyen Talepler
+            </Text>
+            <View
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 999,
+                backgroundColor: c.accent,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.accentForeground,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 11,
+                }}
+              >
+                {pendingRequests.length}
+              </Text>
+            </View>
+          </View>
+          {pendingRequests.map((b) => {
+            const customerName = b.customer?.name ?? "Müşteri";
+            const resort = b.resort?.name ?? "";
+            const overdue = b.approval_status === "awaiting_response";
+            return (
+              <Card key={b.id} style={{ gap: 10 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 8,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      style={{
+                        color: c.foreground,
+                        fontFamily: "Inter_600SemiBold",
+                        fontSize: 15,
+                      }}
+                    >
+                      {customerName}
+                    </Text>
+                    <Text
+                      style={{
+                        color: c.mutedForeground,
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
+                      {formatDateTR(b.lesson_date)}
+                      {resort ? `  ·  ${resort}` : ""}
+                      {`  ·  ${b.student_count} öğrenci  ·  ${b.slot_ids.length} ders`}
+                    </Text>
+                    {b.requested_at ? (
+                      <Text
+                        style={{
+                          color: overdue ? c.destructive : c.mutedForeground,
+                          fontSize: 11,
+                          marginTop: 4,
+                          fontFamily: "Inter_500Medium",
+                        }}
+                      >
+                        {overdue
+                          ? "12 saat geçti — müşteri yanıt bekliyor"
+                          : `Talep ${relativeTime(b.requested_at)}`}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Pill
+                    label={overdue ? "Gecikti" : "Yeni Talep"}
+                    tone={overdue ? "danger" : "warning"}
+                    size="sm"
+                  />
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      variant="secondary"
+                      label="Reddet"
+                      onPress={() => respond(b.id, "reject")}
+                    />
+                  </View>
+                  <View style={{ flex: 1.4 }}>
+                    <Button
+                      variant="accent"
+                      label="Onayla"
+                      onPress={() => respond(b.id, "accept")}
+                    />
+                  </View>
+                </View>
+              </Card>
+            );
+          })}
+        </View>
+      ) : null}
 
       <Text style={[styles.sectionTitle, { color: c.foreground }]}>
         Yaklaşan dersler

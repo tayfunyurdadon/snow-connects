@@ -259,6 +259,46 @@ Each migration is in `supabase/migrations/` and is idempotent. Apply via SQL edi
   list query in `(admin)/(tabs)/operations.tsx` adds `.eq('source', 'online')` for the
   same reason.
 
+- **Phase 18 — Request-to-Book / Airbnb-style approval
+  (`2026_05_phase18_request_to_book.sql`).** Customers no longer auto-charge
+  on booking — they SEND a REQUEST and the instructor has 12h to accept/reject.
+  Slots are tentatively held the moment the request is sent; freed if the
+  request is rejected, customer-cancelled, or auto-expired. After 12h without
+  a response the request moves to `awaiting_response` (NOT cancelled), and the
+  customer is offered "Beklemeye Devam" (+12h, increments `extension_count`)
+  or "Geri Çek". Hard guardrail: any still-pending request within 24h of the
+  lesson date is auto-cancelled. New columns on `bookings`: `approval_status`
+  (pending|awaiting_response|approved|rejected|expired|customer_cancelled —
+  NULL on legacy paid bookings, which the migration backfills to `approved`),
+  `requested_at`, `approval_deadline`, `approved_at`, `rejection_reason`,
+  `extension_count`, `payment_method_token`. New column on
+  `instructor_profiles`: `instant_book_enabled boolean default false` —
+  when true, requests skip approval and are auto-paid (legacy flow). New
+  table `push_tokens(user_id, token, platform)` with RLS for Expo push.
+  RPCs (all `security definer`): `request_booking` (replaces `create_booking`
+  for the customer flow; falls back to instant when `test_mode` or
+  `instant_book_enabled` — same payout behaviour as before),
+  `instructor_accept_request` (captures stub payment, inserts payout, routes
+  to school recipient when `school_id` set), `instructor_reject_request`
+  (frees slots, no charge), `customer_extend_request` (clamps new deadline
+  to `lesson_date − 24h`), `customer_cancel_request` (frees slots),
+  `mark_overdue_requests` (sweeper: pending → awaiting_response after 12h),
+  `auto_cancel_late_requests` (24h-before-lesson guardrail),
+  `instructor_set_instant_book(boolean)`, `register_push_token(text,text)`.
+  Optional pg_cron jobs (every 5/15 min) registered when extension exists.
+  Frontend: `book/[instructorId]` calls `request_booking` and routes to
+  bookings list with "Talebin gönderildi" alert (instant flow still routes
+  to payment screen); `booking-detail/[bookingId]` renders 4 new states with
+  the empathetic 12h "Eğitmen henüz dönüş yapmadı" card +
+  Beklemeye-Devam / Geri-Çek buttons (customer side) and Onayla / Reddet
+  buttons (instructor side); Eğitmen home (`(tabs)/index.tsx`
+  `InstructorHome`) shows a "Bekleyen Talepler" card with count badge,
+  customer name, slot count, time-since-request, and inline accept/reject;
+  `instructor-panel/setup.tsx` exposes the Anında Onay toggle. Push
+  notification UI is scaffolded but token-registration wiring is intentionally
+  left for a Phase 18b — the table + RPC are in place so the client can opt
+  in without further DB work.
+
 - **Phase 15 — Effective school pricing
   (`2026_05_phase15_school_pricing_effective.sql`).** Phase 10 added per-school tier
   prices but `create_booking` and the customer screens never read them, so school-

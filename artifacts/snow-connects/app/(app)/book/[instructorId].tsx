@@ -344,6 +344,7 @@ export default function BookScreen() {
   }
 
   async function submit() {
+    if (submitting) return;
     const err = validate();
     if (err) {
       if (typeof window !== "undefined" && typeof window.alert === "function") {
@@ -390,13 +391,15 @@ export default function BookScreen() {
     );
     const createdIds: string[] = [];
     let autoPaid = false;
+    let isRequest = false;
     for (const [d, slots] of grouped) {
-      const { data, error } = await supabase.rpc("create_booking", {
+      const { data, error } = await supabase.rpc("request_booking", {
         p_instructor: instructorId,
         p_resort: resortId,
         p_date: d,
         p_slot_times: slots,
         p_students: students,
+        p_payment_method_token: null,
       });
       if (error) {
         setSubmitting(false);
@@ -424,24 +427,41 @@ export default function BookScreen() {
         );
         return;
       }
-      createdIds.push((data as { booking_id: string }).booking_id);
-      // Track whether test mode auto-paid the booking. When on, every
-      // booking comes back already paid and we should skip the payment
-      // screen entirely.
-      if ((data as { payment_status?: string }).payment_status === "paid") {
-        autoPaid = true;
-      }
+      const r = data as {
+        booking_id: string;
+        payment_status?: string;
+        approval_status?: string;
+        is_instant?: boolean;
+      };
+      createdIds.push(r.booking_id);
+      // Track flow: instant book / test mode auto-pay vs. approval-pending request.
+      if (r.payment_status === "paid") autoPaid = true;
+      if (r.approval_status === "pending") isRequest = true;
     }
     setSubmitting(false);
     await clearDraft();
 
-    if (autoPaid) {
-      // Test mode: no payment step. Confirm and route to bookings.
+    if (isRequest) {
+      // Phase 18: request sent, no charge yet. Customer waits on instructor.
+      Alert.alert(
+        "🎿 Talebin gönderildi",
+        createdIds.length === 1
+          ? "Eğitmenin 12 saat içinde onaylaması bekleniyor. Onaylandığında bildirim alacaksın."
+          : `${createdIds.length} talep gönderildi. Eğitmenin onayı bekleniyor.`,
+        [
+          {
+            text: "Rezervasyonlarım",
+            onPress: () => router.replace("/(app)/(tabs)/bookings"),
+          },
+        ],
+      );
+    } else if (autoPaid) {
+      // Instant book / test mode: booking already approved + paid.
       Alert.alert(
         "🎿 Rezervasyonun onaylandı!",
         createdIds.length === 1
-          ? "Test modu açık olduğu için ödeme atlandı."
-          : `${createdIds.length} ders oluşturuldu. Test modu açık olduğu için ödeme atlandı.`,
+          ? "Anında onay aktif olduğu için rezervasyonun hemen onaylandı."
+          : `${createdIds.length} ders oluşturuldu ve onaylandı.`,
         [
           {
             text: "Rezervasyonlarım",
@@ -450,10 +470,7 @@ export default function BookScreen() {
         ],
       );
     } else {
-      // Always send the customer straight to the payment screen — no
-      // extra tap, no detour through the bookings list. For multi-day
-      // bookings we land on the first day's payment; once it succeeds
-      // the payment screen advances them through the rest in order.
+      // Legacy fallback: pending payment.
       router.replace(`/(app)/payment/${createdIds[0]}`);
     }
   }
@@ -946,6 +963,10 @@ function blankStudent(): StudentInput {
 function translateError(msg: string): string {
   if (msg.includes("season closed")) return "Bu tarih sezon dışında.";
   if (msg.includes("slot taken")) return "Seçili saatlerden biri dolu.";
+  if (msg.includes("lesson_too_soon"))
+    return "Ders tarihine 24 saatten az kaldı, lütfen daha ileri bir tarih seç.";
+  if (msg.includes("instructor not verified"))
+    return "Eğitmenin profili henüz onaylanmadı.";
   if (msg.includes("blocked"))
     return "Hesabınız bloke. Lütfen destek ile iletişime geçin.";
   if (msg.includes("not authenticated"))

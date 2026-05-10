@@ -328,18 +328,63 @@ export default function BookingDetailScreen() {
         </View>
       </Card>
 
-      <View style={{ flexDirection: "row", gap: 8, justifyContent: "center" }}>
-        <PaymentPill status={booking.payment_status} />
+      <View style={{ flexDirection: "row", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+        {booking.approval_status === "pending" ? (
+          <Pill label="Onay Bekliyor" tone="warning" size="sm" />
+        ) : booking.approval_status === "awaiting_response" ? (
+          <Pill label="Eğitmen Yanıt Vermedi" tone="warning" size="sm" />
+        ) : booking.approval_status === "rejected" ? (
+          <Pill label="Eğitmen Reddetti" tone="danger" size="sm" />
+        ) : booking.approval_status === "expired" ? (
+          <Pill label="Süresi Doldu" tone="danger" size="sm" />
+        ) : booking.approval_status === "customer_cancelled" ? (
+          <Pill label="Geri Çekildi" tone="danger" size="sm" />
+        ) : (
+          <PaymentPill status={booking.payment_status} />
+        )}
         {booking.lesson_status === "in_progress" ? (
           <Pill label="Ders devam ediyor" tone="warning" size="sm" />
         ) : null}
         {booking.lesson_status === "completed" ? (
           <Pill label="Tamamlandı" tone="success" size="sm" />
         ) : null}
-        {booking.lesson_status === "cancelled" ? (
+        {booking.lesson_status === "cancelled" &&
+        !booking.approval_status ? (
           <Pill label="İptal Edildi" tone="danger" size="sm" />
         ) : null}
       </View>
+
+      {isCustomer &&
+      (booking.approval_status === "pending" ||
+        booking.approval_status === "awaiting_response") ? (
+        <RequestStatusCard
+          booking={booking}
+          onChange={() => {
+            qc.invalidateQueries({
+              queryKey: ["booking-detail", bookingId],
+            });
+            qc.invalidateQueries({ queryKey: ["bookings"] });
+          }}
+        />
+      ) : null}
+
+      {isInstructor &&
+      (booking.approval_status === "pending" ||
+        booking.approval_status === "awaiting_response") ? (
+        <InstructorRequestActions
+          bookingId={booking.id}
+          status={booking.approval_status}
+          onChange={() => {
+            qc.invalidateQueries({
+              queryKey: ["booking-detail", bookingId],
+            });
+            qc.invalidateQueries({ queryKey: ["bookings"] });
+            qc.invalidateQueries({
+              queryKey: ["instructor-pending-requests"],
+            });
+          }}
+        />
+      ) : null}
 
       {booking.lesson_status === "in_progress" && booking.lesson_started_at ? (
         <Card tone="soft" padding={14}>
@@ -1078,6 +1123,298 @@ function PolicyRow({ text }: { text: string }) {
       </Text>
     </View>
   );
+}
+
+// ------------------------------------------------------------
+// Phase 18 — Request-to-Book status cards
+// ------------------------------------------------------------
+
+function RequestStatusCard({
+  booking,
+  onChange,
+}: {
+  booking: BookingWithExtras;
+  onChange: () => void;
+}) {
+  const c = useColors();
+  const [busy, setBusy] = useState(false);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isOverdue = booking.approval_status === "awaiting_response";
+  const deadline = booking.approval_deadline
+    ? new Date(booking.approval_deadline)
+    : null;
+  const remainingMs = deadline ? deadline.getTime() - Date.now() : 0;
+
+  async function extend() {
+    setBusy(true);
+    const { error } = await supabase.rpc("customer_extend_request", {
+      p_booking: booking.id,
+    });
+    setBusy(false);
+    if (error) {
+      Alert.alert("İşlem başarısız", error.message);
+      return;
+    }
+    onChange();
+    Alert.alert(
+      "Beklemeye devam",
+      "Eğitmene 12 saat daha süre tanındı.",
+    );
+  }
+
+  async function cancelReq() {
+    Alert.alert(
+      "Talebi geri çek",
+      "Bu talebi iptal etmek istediğine emin misin? Hiçbir ücret alınmadı.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Talebi Geri Çek",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            const { error } = await supabase.rpc("customer_cancel_request", {
+              p_booking: booking.id,
+            });
+            setBusy(false);
+            if (error) {
+              Alert.alert("İptal başarısız", error.message);
+              return;
+            }
+            onChange();
+          },
+        },
+      ],
+    );
+  }
+
+  if (isOverdue) {
+    return (
+      <Card padding={18} style={{ gap: 12 }}>
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+          <Feather name="clock" size={18} color={c.accentDeep} />
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 17,
+                letterSpacing: -0.2,
+                marginBottom: 6,
+              }}
+            >
+              Eğitmen henüz dönüş yapmadı
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                lineHeight: 19,
+              }}
+            >
+              Sezonun yoğun döneminde eğitmenlerimiz bazen geç yanıt verebiliyor.
+              Beklemeye devam edebilir veya talebini geri çekebilirsin —
+              hiçbir ücret alınmadı.
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+          <View style={{ flex: 1 }}>
+            <Button
+              variant="secondary"
+              label="Geri Çek"
+              onPress={cancelReq}
+              loading={busy}
+            />
+          </View>
+          <View style={{ flex: 1.4 }}>
+            <Button
+              variant="accent"
+              label="Beklemeye Devam"
+              onPress={extend}
+              loading={busy}
+            />
+          </View>
+        </View>
+        {booking.extension_count > 0 ? (
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontSize: 11,
+              fontFamily: "Inter_500Medium",
+              textAlign: "center",
+            }}
+          >
+            {booking.extension_count}× ek süre verildi
+          </Text>
+        ) : null}
+      </Card>
+    );
+  }
+
+  // Pending — within SLA
+  return (
+    <Card padding={18} style={{ gap: 12 }}>
+      <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+        <Feather name="send" size={18} color={c.accentDeep} />
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: c.foreground,
+              fontFamily: "Fraunces_600SemiBold",
+              fontSize: 17,
+              letterSpacing: -0.2,
+              marginBottom: 6,
+            }}
+          >
+            Talebin eğitmene iletildi
+          </Text>
+          <Text
+            style={{
+              color: c.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 13,
+              lineHeight: 19,
+            }}
+          >
+            Eğitmen 12 saat içinde yanıt verecek. Onaylandığında ödeme alınacak,
+            reddedilirse hiçbir ücret alınmayacak.
+          </Text>
+          {deadline && remainingMs > 0 ? (
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 12,
+                marginTop: 8,
+              }}
+            >
+              Kalan süre: {formatHoursLeft(remainingMs)}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <Button
+        variant="secondary"
+        label="Talebi Geri Çek"
+        onPress={cancelReq}
+        loading={busy}
+      />
+    </Card>
+  );
+}
+
+function InstructorRequestActions({
+  bookingId,
+  status,
+  onChange,
+}: {
+  bookingId: string;
+  status: "pending" | "awaiting_response";
+  onChange: () => void;
+}) {
+  const c = useColors();
+  const [busy, setBusy] = useState(false);
+
+  async function accept() {
+    setBusy(true);
+    const { error } = await supabase.rpc("instructor_accept_request", {
+      p_booking: bookingId,
+    });
+    setBusy(false);
+    if (error) {
+      Alert.alert("Onaylanamadı", error.message);
+      return;
+    }
+    onChange();
+    Alert.alert("Onaylandı", "Müşteriye bildirim gönderildi.");
+  }
+
+  async function reject() {
+    Alert.alert(
+      "Talebi reddet",
+      "Bu talebi reddetmek istediğine emin misin?",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Reddet",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            const { error } = await supabase.rpc(
+              "instructor_reject_request",
+              { p_booking: bookingId, p_reason: null },
+            );
+            setBusy(false);
+            if (error) {
+              Alert.alert("Reddedilemedi", error.message);
+              return;
+            }
+            onChange();
+          },
+        },
+      ],
+    );
+  }
+
+  return (
+    <Card padding={18} style={{ gap: 12 }}>
+      <Text
+        style={{
+          color: c.foreground,
+          fontFamily: "Fraunces_600SemiBold",
+          fontSize: 17,
+          letterSpacing: -0.2,
+        }}
+      >
+        Bu talebi yanıtla
+      </Text>
+      <Text
+        style={{
+          color: c.mutedForeground,
+          fontFamily: "Inter_400Regular",
+          fontSize: 13,
+          lineHeight: 19,
+        }}
+      >
+        {status === "awaiting_response"
+          ? "12 saat geçti, müşteri yanıtını bekliyor. Onayladığında ödeme tahsil edilir."
+          : "Onayladığında ödeme tahsil edilir, reddedersen saatler tekrar açılır."}
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button
+            variant="secondary"
+            label="Reddet"
+            onPress={reject}
+            loading={busy}
+          />
+        </View>
+        <View style={{ flex: 1.4 }}>
+          <Button
+            variant="accent"
+            label="Onayla"
+            onPress={accept}
+            loading={busy}
+          />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function formatHoursLeft(ms: number): string {
+  const totalMin = Math.max(0, Math.floor(ms / 60_000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h >= 1) return `${h} saat ${m} dk`;
+  return `${m} dk`;
 }
 
 function PaymentPill({ status }: { status: Booking["payment_status"] }) {

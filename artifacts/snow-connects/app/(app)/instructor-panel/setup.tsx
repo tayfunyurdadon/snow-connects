@@ -47,6 +47,7 @@ export default function InstructorSetup() {
   });
   const [certs, setCerts] = useState("");
   const [selectedResorts, setSelectedResorts] = useState<string[]>([]);
+  const [instantBook, setInstantBook] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -94,6 +95,7 @@ export default function InstructorSetup() {
       });
       setCerts((profile.certifications ?? []).join(", "));
       setSelectedResorts(profile.resort_ids ?? []);
+      setInstantBook(!!profile.instant_book_enabled);
       setHydrated(true);
     }
   }, [profile, hydrated]);
@@ -142,6 +144,7 @@ export default function InstructorSetup() {
         .map((s) => s.trim())
         .filter(Boolean),
       resort_ids: selectedResorts,
+      instant_book_enabled: instantBook,
     };
 
     try {
@@ -399,6 +402,64 @@ export default function InstructorSetup() {
           })}
         </View>
       </View>
+
+      {/* Phase 18 — Anında Onay (Instant Book) toggle */}
+      <Card padding={16} style={{ gap: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                color: c.foreground,
+                fontFamily: "Fraunces_600SemiBold",
+                fontSize: 16,
+                letterSpacing: -0.2,
+              }}
+            >
+              Anında Onay
+            </Text>
+            <Text
+              style={{
+                color: c.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 12,
+                marginTop: 4,
+                lineHeight: 18,
+              }}
+            >
+              Açıkken müşteri rezervasyonları onay beklemeden anında onaylanır
+              ve ödemen tahsil edilir. Kapalıyken her talep için 12 saat
+              içinde Onayla / Reddet kararı vermen gerekir.
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setInstantBook((v) => !v)}
+            style={{
+              width: 52,
+              height: 30,
+              borderRadius: 15,
+              backgroundColor: instantBook ? c.accent : c.muted,
+              padding: 3,
+              justifyContent: "center",
+              alignItems: instantBook ? "flex-end" : "flex-start",
+            }}
+          >
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: c.card,
+              }}
+            />
+          </Pressable>
+        </View>
+      </Card>
 
       <Card tone="soft" padding={14}>
         <Text

@@ -124,6 +124,9 @@ export interface InstructorProfile {
   verification_status: VerificationStatus;
   school_id?: string | null;
   school_approval_status?: SchoolApprovalStatus;
+  // Phase 18 — when true, customer requests are auto-accepted and money
+  // is captured immediately (legacy flow). Default false (request flow).
+  instant_book_enabled?: boolean;
 }
 
 export type DisputeReason =
@@ -288,6 +291,25 @@ export interface Booking {
   cancelled_at: string | null;
   refund_amount: number | null;
   refund_pct: number | null;
+  // Phase 18 — Request-to-Book (Airbnb-style instructor approval).
+  // Null on legacy bookings; non-null on requests created via
+  // request_booking(). 'approved' means money has been (or will be)
+  // captured; 'awaiting_response' means 12h passed and customer was
+  // asked to extend or cancel.
+  approval_status:
+    | "pending"
+    | "awaiting_response"
+    | "approved"
+    | "rejected"
+    | "expired"
+    | "customer_cancelled"
+    | null;
+  requested_at: string | null;
+  approval_deadline: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  extension_count: number;
+  payment_method_token: string | null;
 }
 
 export interface Message {
