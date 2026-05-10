@@ -21,6 +21,7 @@ import { Screen } from "@/components/ui/Screen";
 import { StarRating } from "@/components/ui/StarRating";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { confirmAlert, showAlert } from "@/lib/uiAlert";
 import { formatDateTR, formatTRY } from "@/lib/format";
 import { cancelLessonReminders } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
@@ -176,20 +177,20 @@ export default function BookingDetailScreen() {
     });
     setSubmittingReview(false);
     if (error) {
-      Alert.alert("Yorum gönderilemedi", error.message);
+      showAlert("Yorum gönderilemedi", error.message);
       return;
     }
     setReviewOpen(false);
     qc.invalidateQueries({ queryKey: ["review", bookingId] });
     qc.invalidateQueries({ queryKey: ["instructor", booking?.instructor_id] });
     qc.invalidateQueries({ queryKey: ["instructors"] });
-    Alert.alert("Teşekkürler!", "Değerlendirmen kaydedildi.");
+    showAlert("Teşekkürler!", "Değerlendirmen kaydedildi.");
   }
 
   async function submitDispute() {
     const desc = disputeDescription.trim();
     if (desc.length < 10) {
-      Alert.alert(
+      showAlert(
         "Açıklama eksik",
         "Lütfen sorunu en az 10 karakter olarak açıkla.",
       );
@@ -203,12 +204,12 @@ export default function BookingDetailScreen() {
     });
     setSubmittingDispute(false);
     if (error) {
-      Alert.alert("İtiraz gönderilemedi", error.message);
+      showAlert("İtiraz gönderilemedi", error.message);
       return;
     }
     setDisputeOpen(false);
     qc.invalidateQueries({ queryKey: ["dispute", bookingId] });
-    Alert.alert(
+    showAlert(
       "İtirazın alındı",
       "Ekibimiz en kısa sürede inceleyip seninle iletişime geçecek.",
     );
@@ -217,7 +218,7 @@ export default function BookingDetailScreen() {
   async function confirmCancel() {
     const reason = cancelReason.trim();
     if (reason.length < 3) {
-      Alert.alert(
+      showAlert(
         "Sebep gerekli",
         "Lütfen iptal sebebini en az 3 karakter olarak yaz.",
       );
@@ -233,7 +234,7 @@ export default function BookingDetailScreen() {
     });
     setCancelling(false);
     if (error) {
-      Alert.alert("İptal başarısız", error.message);
+      showAlert("İptal başarısız", error.message);
       return;
     }
     setCancelOpen(false);
@@ -243,7 +244,7 @@ export default function BookingDetailScreen() {
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
     if (isInstructor) {
-      Alert.alert(
+      showAlert(
         "Rezervasyon iptal edildi",
         booking?.payment_status === "paid"
           ? "Müşteriye tam iade yapılacak ve saatler tekrar müsait."
@@ -260,7 +261,7 @@ export default function BookingDetailScreen() {
     const result = data as { refund_pct?: number; refund_amount?: number };
     const pct = result?.refund_pct ?? 0;
     const amount = result?.refund_amount ?? 0;
-    Alert.alert(
+    showAlert(
       "Rezervasyon iptal edildi",
       pct === 0
         ? "Ders saatine 24 saatten az kaldığı için iade yapılamadı."
@@ -1157,39 +1158,31 @@ function RequestStatusCard({
     });
     setBusy(false);
     if (error) {
-      Alert.alert("İşlem başarısız", error.message);
+      showAlert("İşlem başarısız", error.message);
       return;
     }
     onChange();
-    Alert.alert(
-      "Beklemeye devam",
-      "Eğitmene 12 saat daha süre tanındı.",
-    );
+    showAlert("Beklemeye devam", "Eğitmene 12 saat daha süre tanındı.");
   }
 
   async function cancelReq() {
-    Alert.alert(
+    confirmAlert(
       "Talebi geri çek",
       "Bu talebi iptal etmek istediğine emin misin? Hiçbir ücret alınmadı.",
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Talebi Geri Çek",
-          style: "destructive",
-          onPress: async () => {
-            setBusy(true);
-            const { error } = await supabase.rpc("customer_cancel_request", {
-              p_booking: booking.id,
-            });
-            setBusy(false);
-            if (error) {
-              Alert.alert("İptal başarısız", error.message);
-              return;
-            }
-            onChange();
-          },
-        },
-      ],
+      "Talebi Geri Çek",
+      async () => {
+        setBusy(true);
+        const { error } = await supabase.rpc("customer_cancel_request", {
+          p_booking: booking.id,
+        });
+        setBusy(false);
+        if (error) {
+          showAlert("İptal başarısız", error.message);
+          return;
+        }
+        onChange();
+      },
+      { destructive: true },
     );
   }
 
@@ -1329,37 +1322,32 @@ function InstructorRequestActions({
     });
     setBusy(false);
     if (error) {
-      Alert.alert("Onaylanamadı", error.message);
+      showAlert("Onaylanamadı", error.message);
       return;
     }
     onChange();
-    Alert.alert("Onaylandı", "Müşteriye bildirim gönderildi.");
+    showAlert("Onaylandı", "Müşteriye bildirim gönderildi.");
   }
 
   async function reject() {
-    Alert.alert(
+    confirmAlert(
       "Talebi reddet",
       "Bu talebi reddetmek istediğine emin misin?",
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Reddet",
-          style: "destructive",
-          onPress: async () => {
-            setBusy(true);
-            const { error } = await supabase.rpc(
-              "instructor_reject_request",
-              { p_booking: bookingId, p_reason: null },
-            );
-            setBusy(false);
-            if (error) {
-              Alert.alert("Reddedilemedi", error.message);
-              return;
-            }
-            onChange();
-          },
-        },
-      ],
+      "Reddet",
+      async () => {
+        setBusy(true);
+        const { error } = await supabase.rpc("instructor_reject_request", {
+          p_booking: bookingId,
+          p_reason: null,
+        });
+        setBusy(false);
+        if (error) {
+          showAlert("Reddedilemedi", error.message);
+          return;
+        }
+        onChange();
+      },
+      { destructive: true },
     );
   }
 

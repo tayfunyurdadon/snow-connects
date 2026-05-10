@@ -21,6 +21,7 @@ import { Screen } from "@/components/ui/Screen";
 import { SupportBanner } from "@/components/ui/SupportBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { showAlert } from "@/lib/uiAlert";
 import { formatDateShortTR, formatTRY } from "@/lib/format";
 import { calcBreakdown, effectiveTieredProfile } from "@/lib/pricing";
 import { isInSeason, isoDate, stripTime } from "@/lib/season";
@@ -347,11 +348,7 @@ export default function BookScreen() {
     if (submitting) return;
     const err = validate();
     if (err) {
-      if (typeof window !== "undefined" && typeof window.alert === "function") {
-        window.alert(`Eksik bilgi: ${err}`);
-      } else {
-        Alert.alert("Eksik bilgi", err);
-      }
+      showAlert("Eksik bilgi", err);
       return;
     }
 
@@ -405,17 +402,13 @@ export default function BookScreen() {
         setSubmitting(false);
         const friendly = translateError(error.message);
         if (createdIds.length === 0) {
-          if (typeof window !== "undefined" && typeof window.alert === "function") {
-            window.alert(`Rezervasyon başarısız: ${friendly}`);
-          } else {
-            Alert.alert("Rezervasyon başarısız", friendly);
-          }
+          showAlert("Rezervasyon başarısız", friendly);
           return;
         }
         // Partial success — don't trap state; clear what was committed
         // and route to the bookings list so the user can pay/manage.
         await clearDraft();
-        Alert.alert(
+        showAlert(
           "Kısmen oluşturuldu",
           `${createdIds.length} gün rezerve edildi. Kalan günler için hata: ${friendly}`,
           [
@@ -443,7 +436,7 @@ export default function BookScreen() {
 
     if (isRequest) {
       // Phase 18: request sent, no charge yet. Customer waits on instructor.
-      Alert.alert(
+      showAlert(
         "🎿 Talebin gönderildi",
         createdIds.length === 1
           ? "Eğitmenin 12 saat içinde onaylaması bekleniyor. Onaylandığında bildirim alacaksın."
@@ -457,7 +450,7 @@ export default function BookScreen() {
       );
     } else if (autoPaid) {
       // Instant book / test mode: booking already approved + paid.
-      Alert.alert(
+      showAlert(
         "🎿 Rezervasyonun onaylandı!",
         createdIds.length === 1
           ? "Anında onay aktif olduğu için rezervasyonun hemen onaylandı."

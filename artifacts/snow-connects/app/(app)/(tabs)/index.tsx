@@ -5,8 +5,8 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Alert } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
+import { confirmAlert, showAlert } from "@/lib/uiAlert";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -537,17 +537,12 @@ function InstructorHome() {
     action: "accept" | "reject",
   ) {
     if (action === "reject") {
-      Alert.alert(
+      confirmAlert(
         "Talebi reddet",
         "Bu talebi reddetmek istediğine emin misin?",
-        [
-          { text: "Vazgeç", style: "cancel" },
-          {
-            text: "Reddet",
-            style: "destructive",
-            onPress: () => doReject(bookingId),
-          },
-        ],
+        "Reddet",
+        () => doReject(bookingId),
+        { destructive: true },
       );
       return;
     }
@@ -555,14 +550,14 @@ function InstructorHome() {
       p_booking: bookingId,
     });
     if (error) {
-      Alert.alert("Onaylanamadı", error.message);
+      showAlert("Onaylanamadı", error.message);
       return;
     }
     qc.invalidateQueries({
       queryKey: ["instructor-pending-requests", user?.id],
     });
     qc.invalidateQueries({ queryKey: ["instructor-upcoming", user?.id] });
-    Alert.alert("Talep onaylandı", "Müşteriye bildirim gönderildi.");
+    showAlert("Talep onaylandı", "Müşteriye bildirim gönderildi.");
   }
 
   async function doReject(bookingId: string) {
@@ -571,13 +566,13 @@ function InstructorHome() {
       p_reason: null,
     });
     if (error) {
-      Alert.alert("Reddedilemedi", error.message);
+      showAlert("Reddedilemedi", error.message);
       return;
     }
     qc.invalidateQueries({
       queryKey: ["instructor-pending-requests", user?.id],
     });
-    Alert.alert("Talep reddedildi", "Saatlerin tekrar müsait.");
+    showAlert("Talep reddedildi", "Saatlerin tekrar müsait.");
   }
 
   const { data: bookings } = useQuery({
