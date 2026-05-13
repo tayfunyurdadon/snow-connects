@@ -1,0 +1,53 @@
+FIX INCOMPLETE PAYMENT FLOW - 15 MINUTE DEADLINE
+
+PROBLEM:
+- Student clicks "Confirm" → sees payment screen → goes back without paying
+- Booking shows "Pending Payment" in Instructor Panel
+- Student Panel: booking disappears completely (NO way to return and pay)
+
+SOLUTION:
+
+1. STUDENT PANEL - ADD "PENDING PAYMENTS" SECTION:
+   - Show all unpaid bookings
+   - Display: Instructor name, lesson date/time, amount to pay
+   - Add "Complete Payment" button for each booking
+   - Add "Cancel Booking" button
+
+2. BOOKING STATUSES:
+   - "pending_payment" → Student confirmed but didn't pay yet
+   - "paid" → Payment completed, booking confirmed
+   - "cancelled" → Cancelled or expired
+
+3. PAYMENT TIMEOUT - 15 MINUTES:
+   - Set 15-minute deadline to complete payment
+   - Show countdown timer: "Complete payment within 14:35"
+   - Auto-cancel booking after 15 minutes if not paid
+   - Release instructor's time slot back to available immediately
+
+4. "COMPLETE PAYMENT" BUTTON:
+   - Retrieve existing booking details
+   - Show payment summary again
+   - Direct to payment gateway
+   - After payment: move to "Upcoming Lessons"
+
+5. INSTRUCTOR PANEL:
+   - Separate "Confirmed Lessons" (paid) from "Pending Payment"
+   - Show 15-minute countdown for pending bookings
+   - Auto-remove when cancelled/expired
+   - Time slot becomes available again after auto-cancel
+
+6. NOTIFICATIONS:
+   - Student: "Complete your payment within 15 minutes or booking will be cancelled"
+   - Student: Warning at 5 minutes remaining
+   - Instructor: "Booking confirmed" (when paid) or "Booking cancelled - payment not completed" (if expired)
+
+DATABASE:
+- Add booking_status field: pending_payment / paid / cancelled
+- Add payment_deadline timestamp (created_at + 15 minutes)
+- Run cron job every minute to auto-cancel expired bookings
+- Auto-cancel query: UPDATE bookings SET status='cancelled' WHERE status='pending_payment' AND payment_deadline < NOW()
+
+TESTING:
+1. Create booking → Go back without paying → Check "Pending Payments" appears with countdown
+2. Click "Complete Payment" → Verify payment works
+3. Wait 15 minutes → Verify auto-cancellation and slot becomes available

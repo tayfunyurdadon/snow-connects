@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "M5IWqlbA_lksnBsiP8PoR"
+uri = "file://artifacts/snow-connects/assets/images/icon.png"
+type = "image"
+title = "snow connects icon"
