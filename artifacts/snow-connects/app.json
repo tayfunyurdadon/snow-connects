@@ -5,18 +5,33 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "snow-connects",
-    "userInterfaceStyle": "automatic",
+    "scheme": "snowconnects",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0e2a47"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tayfunyurdadon.snowconnects",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Profil fotoğrafı çekmek ve eğitmen belge yükleme için kameraya erişim gerekiyor.",
+        "NSPhotoLibraryUsageDescription": "Profil fotoğrafı ve eğitmen belge yükleme için fotoğraflara erişim gerekiyor.",
+        "NSLocationWhenInUseUsageDescription": "Yakındaki kayak merkezlerini göstermek için konumuna erişim gerekiyor."
+      }
     },
-    "android": {},
+    "android": {
+      "package": "com.tayfunyurdadon.snowconnects",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0e2a47"
+      }
+    },
     "web": {
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro",
@@ -35,6 +50,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
     }
   }
 }
